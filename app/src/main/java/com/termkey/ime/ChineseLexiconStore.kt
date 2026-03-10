@@ -31,12 +31,15 @@ class ChineseLexiconStore(
     companion object {
         private const val TAG = "TermKeyLexicon"
         private const val DB_NAME = "chinese_lexicon.db"
+        private const val DB_VERSION = 2
         private const val USER_SCORE_INCREMENT = 240
         private const val MAX_SPAN_SYLLABLES = 6
         private const val PATH_BEAM_WIDTH = 16
         private const val JOIN_PENALTY = 32
         private const val EXACT_QUERY_LIMIT = 9
         private const val SINGLE_SYLLABLE_LIMIT = 32
+        private const val INITIAL_PREFIX_LIMIT = 18
+        private const val PARTIAL_PREFIX_LIMIT = 18
         private const val SPAN_QUERY_LIMIT = 6
         private const val CACHE_SIZE = 256
     }
@@ -99,6 +102,128 @@ class ChineseLexiconStore(
             Log.e(TAG, "Failed to persist user frequency for $pinyinKey -> $text", it)
         }
         invalidateCacheFor(pinyinKey)
+    }
+
+    fun lookupInitialCandidates(initialPrefix: String, limit: Int = INITIAL_PREFIX_LIMIT): List<String> {
+        val db = database ?: return emptyList()
+        if (initialPrefix.isBlank()) return emptyList()
+        val cacheKey = "prefix|$limit|$initialPrefix"
+        synchronized(queryCache) {
+            queryCache[cacheKey]?.let { cached ->
+                return cached.map { it.text }
+            }
+        }
+
+        val likePattern = "$initialPrefix%"
+        val rows = mutableListOf<LexiconEntry>()
+        db.rawQuery(
+            """
+            SELECT text, MAX(base_freq) AS base_freq, MAX(syllable_count) AS syllable_count, MAX(user_score) AS user_score
+            FROM (
+                SELECT
+                    l.text AS text,
+                    l.freq AS base_freq,
+                    l.syllable_count AS syllable_count,
+                    COALESCE(u.score, 0) AS user_score
+                FROM lexicon l
+                LEFT JOIN user_freq u
+                    ON u.pinyin_key = l.pinyin_key
+                   AND u.text = l.text
+                WHERE l.syllable_count = 1
+                  AND length(l.text) = 1
+                  AND l.pinyin_key LIKE ?
+
+                UNION ALL
+
+                SELECT
+                    u.text AS text,
+                    0 AS base_freq,
+                    u.syllable_count AS syllable_count,
+                    u.score AS user_score
+                FROM user_freq u
+                WHERE u.syllable_count = 1
+                  AND length(u.text) = 1
+                  AND u.pinyin_key LIKE ?
+            )
+            GROUP BY text
+            ORDER BY (base_freq + user_score) DESC, text ASC
+            LIMIT ?
+            """.trimIndent(),
+            arrayOf(likePattern, likePattern, limit.toString()),
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                rows += LexiconEntry(
+                    text = cursor.getString(0),
+                    baseFreq = cursor.getInt(1),
+                    syllableCount = cursor.getInt(2),
+                    userScore = cursor.getInt(3),
+                )
+            }
+        }
+
+        synchronized(queryCache) {
+            queryCache[cacheKey] = rows
+        }
+        return rows.map { it.text }
+    }
+
+    fun lookupPrefixedCandidates(pinyinPrefix: String, limit: Int = PARTIAL_PREFIX_LIMIT): List<String> {
+        val db = database ?: return emptyList()
+        if (pinyinPrefix.isBlank()) return emptyList()
+        val cacheKey = "prefixed|$limit|$pinyinPrefix"
+        synchronized(queryCache) {
+            queryCache[cacheKey]?.let { cached ->
+                return cached.map { it.text }
+            }
+        }
+
+        val likePattern = "$pinyinPrefix%"
+        val rows = mutableListOf<LexiconEntry>()
+        db.rawQuery(
+            """
+            SELECT text, MAX(base_freq) AS base_freq, MAX(syllable_count) AS syllable_count, MAX(user_score) AS user_score
+            FROM (
+                SELECT
+                    l.text AS text,
+                    l.freq AS base_freq,
+                    l.syllable_count AS syllable_count,
+                    COALESCE(u.score, 0) AS user_score
+                FROM lexicon l
+                LEFT JOIN user_freq u
+                    ON u.pinyin_key = l.pinyin_key
+                   AND u.text = l.text
+                WHERE l.pinyin_key LIKE ?
+
+                UNION ALL
+
+                SELECT
+                    u.text AS text,
+                    0 AS base_freq,
+                    u.syllable_count AS syllable_count,
+                    u.score AS user_score
+                FROM user_freq u
+                WHERE u.pinyin_key LIKE ?
+            )
+            GROUP BY text
+            ORDER BY (base_freq + user_score) DESC, syllable_count DESC, length(text) DESC, text ASC
+            LIMIT ?
+            """.trimIndent(),
+            arrayOf(likePattern, likePattern, limit.toString()),
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                rows += LexiconEntry(
+                    text = cursor.getString(0),
+                    baseFreq = cursor.getInt(1),
+                    syllableCount = cursor.getInt(2),
+                    userScore = cursor.getInt(3),
+                )
+            }
+        }
+
+        synchronized(queryCache) {
+            queryCache[cacheKey] = rows
+        }
+        return rows.map { it.text }
     }
 
     private fun buildBestPaths(syllables: List<String>): List<CandidatePath> {
@@ -235,7 +360,10 @@ class ChineseLexiconStore(
     private fun openDatabase(): SQLiteDatabase {
         val dbFile = appContext.getDatabasePath(DB_NAME)
         if (!dbFile.exists()) {
-            copyAssetDatabase(dbFile)
+            copyAssetDatabase(dbFile, preserveUserFreq = false)
+        } else if (currentUserVersion(dbFile) < DB_VERSION) {
+            Log.d(TAG, "Refreshing Chinese lexicon database to version $DB_VERSION")
+            copyAssetDatabase(dbFile, preserveUserFreq = true)
         }
         return SQLiteDatabase.openDatabase(dbFile.path, null, SQLiteDatabase.OPEN_READWRITE).also { db ->
             db.execSQL(
@@ -251,15 +379,111 @@ class ChineseLexiconStore(
                 """.trimIndent(),
             )
             db.execSQL("CREATE INDEX IF NOT EXISTS idx_user_freq_pinyin ON user_freq(pinyin_key)")
+            db.execSQL("PRAGMA user_version = $DB_VERSION")
         }
     }
 
-    private fun copyAssetDatabase(target: File) {
-        target.parentFile?.mkdirs()
-        appContext.assets.open(DB_NAME).use { input ->
-            target.outputStream().use { output ->
-                input.copyTo(output)
+    private fun copyAssetDatabase(target: File, preserveUserFreq: Boolean) {
+        val backup = if (preserveUserFreq && target.exists()) {
+            File(target.parentFile, "${target.name}.bak").also { bak ->
+                if (bak.exists()) bak.delete()
+                target.renameTo(bak)
             }
+        } else {
+            null
+        }
+
+        target.parentFile?.mkdirs()
+        try {
+            appContext.assets.open(DB_NAME).use { input ->
+                target.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            if (backup != null && backup.exists()) {
+                migrateUserFrequency(backup, target)
+            }
+        } finally {
+            backup?.delete()
+        }
+    }
+
+    private fun currentUserVersion(dbFile: File): Int {
+        return runCatching {
+            SQLiteDatabase.openDatabase(dbFile.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+                db.rawQuery("PRAGMA user_version", null).use { cursor ->
+                    if (cursor.moveToFirst()) cursor.getInt(0) else 0
+                }
+            }
+        }.getOrDefault(0)
+    }
+
+    private fun migrateUserFrequency(oldDbFile: File, newDbFile: File) {
+        val newDb = SQLiteDatabase.openDatabase(newDbFile.path, null, SQLiteDatabase.OPEN_READWRITE)
+        try {
+            newDb.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS user_freq (
+                    pinyin_key TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    syllable_count INTEGER NOT NULL,
+                    score INTEGER NOT NULL DEFAULT 0,
+                    updated_at INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (pinyin_key, text)
+                )
+                """.trimIndent(),
+            )
+            newDb.execSQL("CREATE INDEX IF NOT EXISTS idx_user_freq_pinyin ON user_freq(pinyin_key)")
+
+            val oldDb = SQLiteDatabase.openDatabase(oldDbFile.path, null, SQLiteDatabase.OPEN_READONLY)
+            try {
+                if (!hasTable(oldDb, "user_freq")) return
+                oldDb.rawQuery(
+                    """
+                    SELECT pinyin_key, text, syllable_count, score, updated_at
+                    FROM user_freq
+                    """.trimIndent(),
+                    null,
+                ).use { cursor ->
+                    while (cursor.moveToNext()) {
+                        newDb.execSQL(
+                            """
+                            INSERT INTO user_freq(pinyin_key, text, syllable_count, score, updated_at)
+                            VALUES (?, ?, ?, ?, ?)
+                            ON CONFLICT(pinyin_key, text) DO UPDATE SET
+                                syllable_count = excluded.syllable_count,
+                                score = MAX(user_freq.score, excluded.score),
+                                updated_at = MAX(user_freq.updated_at, excluded.updated_at)
+                            """.trimIndent(),
+                            arrayOf(
+                                cursor.getString(0),
+                                cursor.getString(1),
+                                cursor.getInt(2),
+                                cursor.getInt(3),
+                                cursor.getLong(4),
+                            ),
+                        )
+                    }
+                }
+            } finally {
+                oldDb.close()
+            }
+        } finally {
+            newDb.close()
+        }
+    }
+
+    private fun hasTable(db: SQLiteDatabase, tableName: String): Boolean {
+        db.rawQuery(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table' AND name = ?
+            LIMIT 1
+            """.trimIndent(),
+            arrayOf(tableName),
+        ).use { cursor ->
+            return cursor.moveToFirst()
         }
     }
 }

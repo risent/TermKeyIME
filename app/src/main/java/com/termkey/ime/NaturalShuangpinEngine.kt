@@ -79,10 +79,11 @@ class NaturalShuangpinEngine(
             }
         }
 
-        val candidates = if (!hasPendingTail && syllables.isNotEmpty()) {
-            lookupCandidates(syllables)
-        } else {
-            emptyList()
+        val candidates = when {
+            !hasPendingTail && syllables.isNotEmpty() -> lookupCandidates(syllables)
+            hasPendingTail && syllables.isEmpty() -> lookupInitialCandidates(pendingTail.first())
+            hasPendingTail && syllables.isNotEmpty() -> lookupPartialCandidates(syllables, pendingTail.first())
+            else -> emptyList()
         }
 
         val preview = when {
@@ -193,6 +194,28 @@ class NaturalShuangpinEngine(
             .filter { it.isNotEmpty() }
             .distinct()
             .take(9)
+    }
+
+    private fun lookupInitialCandidates(rawInitial: Char): List<String> {
+        val prefix = initialCandidatePrefix(rawInitial) ?: return emptyList()
+        return lexiconStore?.lookupInitialCandidates(prefix).orEmpty()
+    }
+
+    private fun lookupPartialCandidates(syllables: List<String>, rawInitial: Char): List<String> {
+        val initialPrefix = initialCandidatePrefix(rawInitial) ?: return emptyList()
+        val prefix = buildString {
+            append(syllables.joinToString("'"))
+            append("'")
+            append(initialPrefix)
+        }
+        return lexiconStore?.lookupPrefixedCandidates(prefix).orEmpty()
+    }
+
+    private fun initialCandidatePrefix(rawInitial: Char): String? {
+        return decodeInitial(rawInitial) ?: when (rawInitial.lowercaseChar()) {
+            'a', 'e', 'o' -> rawInitial.lowercaseChar().toString()
+            else -> null
+        }
     }
 
     private fun generatePhraseCandidates(syllables: List<String>): List<String> {

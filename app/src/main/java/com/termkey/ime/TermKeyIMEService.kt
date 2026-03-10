@@ -3,6 +3,7 @@ package com.termkey.ime
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Rect
 import android.inputmethodservice.InputMethodService
 import android.media.AudioManager
 import android.os.Build
@@ -12,10 +13,12 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
+import android.util.TypedValue
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewConfiguration
 import android.view.animation.Animation
 import android.view.animation.AlphaAnimation
 import android.view.animation.LinearInterpolator
@@ -39,6 +42,11 @@ import androidx.preference.PreferenceManager
  *  - Ctrl combos generate the correct control characters (e.g. Ctrl+C → 0x03)
  */
 class TermKeyIMEService : InputMethodService() {
+    private data class RowTouchState(
+        val bounds: Rect,
+        val keys: List<Pair<View, Rect>>,
+    )
+
     companion object {
         private const val TAG = "TermKeyVoice"
         private const val DELETE_REPEAT_INITIAL_DELAY_MS = 350L
@@ -148,7 +156,6 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_k,
             R.id.key_l,
             R.id.key_esc,
-            R.id.key_alt,
             R.id.key_z,
             R.id.key_x,
             R.id.key_c,
@@ -156,11 +163,12 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_b,
             R.id.key_n,
             R.id.key_m,
-            R.id.key_comma,
-            R.id.key_period,
+            R.id.key_arrow_up,
             R.id.key_shift,
             R.id.key_lang,
+            R.id.key_end,
             R.id.key_space,
+            R.id.key_delete,
             R.id.key_mic,
             R.id.key_arrow_right,
         )
@@ -199,7 +207,6 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_k,
             R.id.key_l,
             R.id.key_esc,
-            R.id.key_alt,
             R.id.key_z,
             R.id.key_x,
             R.id.key_c,
@@ -207,11 +214,12 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_b,
             R.id.key_n,
             R.id.key_m,
-            R.id.key_comma,
-            R.id.key_period,
+            R.id.key_arrow_up,
             R.id.key_shift,
             R.id.key_lang,
+            R.id.key_end,
             R.id.key_space,
+            R.id.key_delete,
             R.id.key_mic,
             R.id.key_arrow_right,
         )
@@ -239,6 +247,7 @@ class TermKeyIMEService : InputMethodService() {
     private lateinit var keyRows: List<LinearLayout>
     private lateinit var languageKey: TextView
     private lateinit var voiceKey: TextView
+    private lateinit var adaptiveTouchDelegate: AdaptiveTouchDelegateGroup
 
     // ── Prefs ────────────────────────────────────────────────────────────────
     private val prefs by lazy { PreferenceManager.getDefaultSharedPreferences(this) }
@@ -253,6 +262,7 @@ class TermKeyIMEService : InputMethodService() {
     private var voicePreviewUsesComposing = false
     private var voiceBlinkAnimation: AlphaAnimation? = null
     private val repeatHandler = Handler(Looper.getMainLooper())
+    private val adaptiveTouchRefreshRunnable = Runnable { rebuildAdaptiveTouchTargets() }
 
     // ── Vibrator ─────────────────────────────────────────────────────────────
     private val vibrator: Vibrator? by lazy {
@@ -301,6 +311,9 @@ class TermKeyIMEService : InputMethodService() {
         applyPreferences()
         buildMacroBar()
         wireKeys()
+        adaptiveTouchDelegate = AdaptiveTouchDelegateGroup(rootView)
+        rootView.touchDelegate = adaptiveTouchDelegate
+        scheduleAdaptiveTouchTargetsUpdate()
 
         return rootView
     }
@@ -331,6 +344,7 @@ class TermKeyIMEService : InputMethodService() {
     private fun applyPreferences() {
         updateKeyboardLayoutUi()
         updateVoiceKeyUI()
+        scheduleAdaptiveTouchTargetsUpdate()
     }
 
     // ── Macro bar ─────────────────────────────────────────────────────────────
@@ -486,7 +500,11 @@ class TermKeyIMEService : InputMethodService() {
         }
 
         // ── Navigation ──
-        wireKey(R.id.key_arrow_up)    { sendKeyCode(KeyEvent.KEYCODE_DPAD_UP) }
+        wireKey(R.id.key_arrow_up)    {
+            if (!handleCompactPunctuationKey(R.id.key_arrow_up)) {
+                sendKeyCode(KeyEvent.KEYCODE_DPAD_UP)
+            }
+        }
         wireKey(R.id.key_arrow_down)  { sendKeyCode(KeyEvent.KEYCODE_DPAD_DOWN) }
         wireKey(R.id.key_arrow_left)  { sendKeyCode(KeyEvent.KEYCODE_DPAD_LEFT) }
         wireKey(R.id.key_arrow_right) {
@@ -497,7 +515,11 @@ class TermKeyIMEService : InputMethodService() {
         wireKey(R.id.key_page_up)     { sendKeyCode(KeyEvent.KEYCODE_PAGE_UP) }
         wireKey(R.id.key_page_down)   { sendKeyCode(KeyEvent.KEYCODE_PAGE_DOWN) }
         wireKey(R.id.key_home)        { sendKeyCode(KeyEvent.KEYCODE_MOVE_HOME) }
-        wireKey(R.id.key_end)         { sendKeyCode(KeyEvent.KEYCODE_MOVE_END) }
+        wireKey(R.id.key_end)         {
+            if (!handleCompactPunctuationKey(R.id.key_end)) {
+                sendKeyCode(KeyEvent.KEYCODE_MOVE_END)
+            }
+        }
 
         // ── Function keys ──
         val fnKeyIds = listOf(
@@ -854,10 +876,17 @@ class TermKeyIMEService : InputMethodService() {
         var repeatStarted = false
         var swipeTriggered = false
         var repeatRunnable: Runnable? = null
+        var compactPunctuationMode = false
 
         view.setOnTouchListener { _, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    compactPunctuationMode = handleCompactPunctuationKey(viewId)
+                    if (compactPunctuationMode) {
+                        feedbackVibrate(16)
+                        feedbackSound()
+                        return@setOnTouchListener true
+                    }
                     feedbackVibrate()
                     feedbackSound()
                     startY = event.y
@@ -875,6 +904,9 @@ class TermKeyIMEService : InputMethodService() {
                 }
 
                 MotionEvent.ACTION_MOVE -> {
+                    if (compactPunctuationMode) {
+                        return@setOnTouchListener true
+                    }
                     if (!swipeTriggered && startY - event.y > swipeThresholdPx) {
                         swipeTriggered = true
                         repeatRunnable?.let(repeatHandler::removeCallbacks)
@@ -884,6 +916,10 @@ class TermKeyIMEService : InputMethodService() {
                 }
 
                 MotionEvent.ACTION_UP -> {
+                    if (compactPunctuationMode) {
+                        compactPunctuationMode = false
+                        return@setOnTouchListener true
+                    }
                     repeatRunnable?.let(repeatHandler::removeCallbacks)
                     if (!swipeTriggered && startY - event.y > swipeThresholdPx) {
                         clearAction()
@@ -895,6 +931,7 @@ class TermKeyIMEService : InputMethodService() {
                 }
 
                 MotionEvent.ACTION_CANCEL -> {
+                    compactPunctuationMode = false
                     repeatRunnable?.let(repeatHandler::removeCallbacks)
                     repeatRunnable = null
                     true
@@ -939,10 +976,10 @@ class TermKeyIMEService : InputMethodService() {
     private fun compactPunctuationOutput(viewId: Int): String? {
         if (layoutMode == KeyboardLayoutMode.FULL) return null
         return when (viewId) {
-            R.id.key_esc -> if (chineseMode) "，" else ","
-            R.id.key_alt -> if (chineseMode) "。" else "."
-            R.id.key_comma -> if (chineseMode) "？" else "?"
-            R.id.key_period -> if (chineseMode) "！" else "!"
+            R.id.key_esc -> if (chineseMode) "！" else "!"
+            R.id.key_arrow_up -> if (chineseMode) "？" else "?"
+            R.id.key_end -> if (chineseMode) "，" else ","
+            R.id.key_delete -> if (chineseMode) "。" else "."
             else -> null
         }
     }
@@ -1054,6 +1091,7 @@ class TermKeyIMEService : InputMethodService() {
         candidates.forEachIndexed { index, candidate ->
             val candidateView = layoutInflater.inflate(R.layout.macro_button, candidateContainer, false) as TextView
             candidateView.text = candidate
+            candidateView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             candidateView.setTextColor(
                 ContextCompat.getColor(
                     this,
@@ -1167,6 +1205,108 @@ class TermKeyIMEService : InputMethodService() {
             candidateScrollView.visibility = View.GONE
         }
         updateVoiceKeyUI()
+        scheduleAdaptiveTouchTargetsUpdate()
+    }
+
+    private fun scheduleAdaptiveTouchTargetsUpdate() {
+        if (!::rootView.isInitialized) return
+        rootView.removeCallbacks(adaptiveTouchRefreshRunnable)
+        rootView.post(adaptiveTouchRefreshRunnable)
+    }
+
+    private fun rebuildAdaptiveTouchTargets() {
+        val host = rootView as? ViewGroup ?: return
+        if (!::adaptiveTouchDelegate.isInitialized) return
+
+        val visibleRows = buildList {
+            if (::fnRow.isInitialized && fnRow.visibility == View.VISIBLE) add(fnRow as ViewGroup)
+            if (::keyRows.isInitialized) {
+                keyRows.filterTo(this) { it.visibility == View.VISIBLE }
+            }
+        }
+        if (visibleRows.isEmpty()) {
+            adaptiveTouchDelegate.updateTargets(emptyList())
+            host.touchDelegate = adaptiveTouchDelegate
+            return
+        }
+
+        val rowStates = visibleRows.mapNotNull { row ->
+            val keyBounds = buildList {
+                for (index in 0 until row.childCount) {
+                    val child = row.getChildAt(index)
+                    if (child.visibility != View.VISIBLE || !child.isClickable || child.width <= 0 || child.height <= 0) continue
+                    add(child to getBoundsRelativeToHost(host, child))
+                }
+            }.sortedBy { it.second.left }
+            if (keyBounds.isEmpty()) {
+                null
+            } else {
+                RowTouchState(
+                    bounds = getBoundsRelativeToHost(host, row),
+                    keys = keyBounds,
+                )
+            }
+        }
+
+        if (rowStates.isEmpty()) {
+            adaptiveTouchDelegate.updateTargets(emptyList())
+            host.touchDelegate = adaptiveTouchDelegate
+            return
+        }
+
+        val extraSlopPx = maxOf(
+            ViewConfiguration.get(this).scaledTouchSlop * 2,
+            (48f * resources.displayMetrics.density).toInt(),
+        )
+
+        val targets = buildList {
+            rowStates.forEachIndexed { rowIndex, rowState ->
+                val bandTop = if (rowIndex == 0) {
+                    rowState.bounds.top
+                } else {
+                    (rowStates[rowIndex - 1].bounds.bottom + rowState.bounds.top) / 2
+                }
+                val bandBottom = if (rowIndex == rowStates.lastIndex) {
+                    rowState.bounds.bottom
+                } else {
+                    (rowState.bounds.bottom + rowStates[rowIndex + 1].bounds.top) / 2
+                }
+
+                rowState.keys.forEachIndexed { keyIndex, (view, actualBounds) ->
+                    val left = if (keyIndex == 0) {
+                        rowState.bounds.left
+                    } else {
+                        (rowState.keys[keyIndex - 1].second.centerX() + actualBounds.centerX()) / 2
+                    }
+                    val right = if (keyIndex == rowState.keys.lastIndex) {
+                        rowState.bounds.right
+                    } else {
+                        (actualBounds.centerX() + rowState.keys[keyIndex + 1].second.centerX()) / 2
+                    }
+                    val delegateBounds = Rect(left, bandTop, right, bandBottom)
+                    val slopBounds = Rect(delegateBounds).apply {
+                        inset(-extraSlopPx, -extraSlopPx)
+                    }
+                    add(
+                        AdaptiveTouchTarget(
+                            view = view,
+                            actualBounds = actualBounds,
+                            delegateBounds = delegateBounds,
+                            slopBounds = slopBounds,
+                        ),
+                    )
+                }
+            }
+        }
+
+        adaptiveTouchDelegate.updateTargets(targets)
+        host.touchDelegate = adaptiveTouchDelegate
+    }
+
+    private fun getBoundsRelativeToHost(host: ViewGroup, view: View): Rect {
+        return Rect(0, 0, view.width, view.height).also { rect ->
+            host.offsetDescendantRectToMyCoords(view, rect)
+        }
     }
 
     private fun applyDynamicKeyLabels() {
@@ -1174,21 +1314,19 @@ class TermKeyIMEService : InputMethodService() {
             emptyMap()
         } else if (chineseMode) {
             mapOf(
-                R.id.key_esc to "，",
-                R.id.key_alt to "。",
-                R.id.key_comma to "？",
-                R.id.key_period to "！",
+                R.id.key_esc to "！",
+                R.id.key_arrow_up to "？",
+                R.id.key_end to "，",
+                R.id.key_delete to "。",
                 R.id.key_arrow_right to "↩",
-                R.id.key_delete to "Del",
             )
         } else {
             mapOf(
-                R.id.key_esc to ",",
-                R.id.key_alt to ".",
-                R.id.key_comma to "?",
-                R.id.key_period to "!",
+                R.id.key_esc to "!",
+                R.id.key_arrow_up to "?",
+                R.id.key_end to ",",
+                R.id.key_delete to ".",
                 R.id.key_arrow_right to "↩",
-                R.id.key_delete to "Del",
             )
         }
 
@@ -1201,7 +1339,9 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_esc to "ESC",
             R.id.key_comma to ",",
             R.id.key_period to ".",
+            R.id.key_end to "End",
             R.id.key_slash to "/",
+            R.id.key_arrow_up to "↑",
             R.id.key_arrow_right to "→",
             R.id.key_delete to "Del",
         )
@@ -1219,6 +1359,8 @@ class TermKeyIMEService : InputMethodService() {
         updateKeyWeight(R.id.key_quote, if (layoutMode == KeyboardLayoutMode.FULL) 1.0f else 0.5f)
         updateKeyWeight(R.id.key_esc, if (layoutMode == KeyboardLayoutMode.FULL) 1.3f else 1.0f)
         updateKeyWeight(R.id.key_alt, if (layoutMode == KeyboardLayoutMode.FULL) 1.3f else 1.0f)
+        updateKeyWeight(R.id.key_end, if (layoutMode == KeyboardLayoutMode.FULL) 1.1f else 1.0f)
+        updateKeyWeight(R.id.key_delete, if (layoutMode == KeyboardLayoutMode.FULL) 1.1f else 1.0f)
     }
 
     private fun applyKeyboardRowHeights() {
