@@ -6,6 +6,8 @@ import android.content.pm.PackageManager
 import android.inputmethodservice.InputMethodService
 import android.media.AudioManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -13,6 +15,7 @@ import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.animation.Animation
 import android.view.animation.AlphaAnimation
 import android.view.animation.LinearInterpolator
@@ -38,6 +41,186 @@ import androidx.preference.PreferenceManager
 class TermKeyIMEService : InputMethodService() {
     companion object {
         private const val TAG = "TermKeyVoice"
+        private const val DELETE_REPEAT_INITIAL_DELAY_MS = 350L
+        private const val DELETE_REPEAT_INTERVAL_MS = 60L
+        private const val CLEAR_TEXT_CHUNK_SIZE = 1024
+
+        private val ALL_KEY_IDS = intArrayOf(
+            R.id.key_grave,
+            R.id.key_1,
+            R.id.key_2,
+            R.id.key_3,
+            R.id.key_4,
+            R.id.key_5,
+            R.id.key_6,
+            R.id.key_7,
+            R.id.key_8,
+            R.id.key_9,
+            R.id.key_0,
+            R.id.key_minus,
+            R.id.key_equals,
+            R.id.key_backspace,
+            R.id.key_tab,
+            R.id.key_q,
+            R.id.key_w,
+            R.id.key_e,
+            R.id.key_r,
+            R.id.key_t,
+            R.id.key_y,
+            R.id.key_u,
+            R.id.key_i,
+            R.id.key_o,
+            R.id.key_p,
+            R.id.key_lbracket,
+            R.id.key_rbracket,
+            R.id.key_backslash,
+            R.id.key_ctrl,
+            R.id.key_a,
+            R.id.key_s,
+            R.id.key_d,
+            R.id.key_f_key,
+            R.id.key_g,
+            R.id.key_h,
+            R.id.key_j,
+            R.id.key_k,
+            R.id.key_l,
+            R.id.key_semicolon,
+            R.id.key_quote,
+            R.id.key_enter,
+            R.id.key_esc,
+            R.id.key_alt,
+            R.id.key_z,
+            R.id.key_x,
+            R.id.key_c,
+            R.id.key_v,
+            R.id.key_b,
+            R.id.key_n,
+            R.id.key_m,
+            R.id.key_comma,
+            R.id.key_period,
+            R.id.key_slash,
+            R.id.key_arrow_up,
+            R.id.key_shift,
+            R.id.key_lang,
+            R.id.key_page_up,
+            R.id.key_page_down,
+            R.id.key_home,
+            R.id.key_end,
+            R.id.key_space,
+            R.id.key_delete,
+            R.id.key_mic,
+            R.id.key_arrow_left,
+            R.id.key_arrow_down,
+            R.id.key_arrow_right,
+        )
+
+        private val COMPACT_ZH_KEY_IDS = setOf(
+            R.id.key_1,
+            R.id.key_2,
+            R.id.key_3,
+            R.id.key_4,
+            R.id.key_5,
+            R.id.key_6,
+            R.id.key_7,
+            R.id.key_8,
+            R.id.key_9,
+            R.id.key_0,
+            R.id.key_minus,
+            R.id.key_equals,
+            R.id.key_backspace,
+            R.id.key_q,
+            R.id.key_w,
+            R.id.key_e,
+            R.id.key_r,
+            R.id.key_t,
+            R.id.key_y,
+            R.id.key_u,
+            R.id.key_i,
+            R.id.key_o,
+            R.id.key_p,
+            R.id.key_a,
+            R.id.key_s,
+            R.id.key_d,
+            R.id.key_f_key,
+            R.id.key_g,
+            R.id.key_h,
+            R.id.key_j,
+            R.id.key_k,
+            R.id.key_l,
+            R.id.key_esc,
+            R.id.key_alt,
+            R.id.key_z,
+            R.id.key_x,
+            R.id.key_c,
+            R.id.key_v,
+            R.id.key_b,
+            R.id.key_n,
+            R.id.key_m,
+            R.id.key_comma,
+            R.id.key_period,
+            R.id.key_shift,
+            R.id.key_lang,
+            R.id.key_space,
+            R.id.key_mic,
+            R.id.key_arrow_right,
+        )
+
+        private val COMPACT_EN_KEY_IDS = setOf(
+            R.id.key_1,
+            R.id.key_2,
+            R.id.key_3,
+            R.id.key_4,
+            R.id.key_5,
+            R.id.key_6,
+            R.id.key_7,
+            R.id.key_8,
+            R.id.key_9,
+            R.id.key_0,
+            R.id.key_minus,
+            R.id.key_equals,
+            R.id.key_backspace,
+            R.id.key_q,
+            R.id.key_w,
+            R.id.key_e,
+            R.id.key_r,
+            R.id.key_t,
+            R.id.key_y,
+            R.id.key_u,
+            R.id.key_i,
+            R.id.key_o,
+            R.id.key_p,
+            R.id.key_a,
+            R.id.key_s,
+            R.id.key_d,
+            R.id.key_f_key,
+            R.id.key_g,
+            R.id.key_h,
+            R.id.key_j,
+            R.id.key_k,
+            R.id.key_l,
+            R.id.key_esc,
+            R.id.key_alt,
+            R.id.key_z,
+            R.id.key_x,
+            R.id.key_c,
+            R.id.key_v,
+            R.id.key_b,
+            R.id.key_n,
+            R.id.key_m,
+            R.id.key_comma,
+            R.id.key_period,
+            R.id.key_shift,
+            R.id.key_lang,
+            R.id.key_space,
+            R.id.key_mic,
+            R.id.key_arrow_right,
+        )
+    }
+
+    private enum class KeyboardLayoutMode {
+        FULL,
+        COMPACT_ZH,
+        COMPACT_EN,
     }
 
     // ── Modifier state ───────────────────────────────────────────────────────
@@ -49,16 +232,19 @@ class TermKeyIMEService : InputMethodService() {
     private lateinit var rootView: View
     private lateinit var macroScrollView: HorizontalScrollView
     private lateinit var macroContainer: LinearLayout
+    private lateinit var macroSeparator: View
     private lateinit var candidateScrollView: HorizontalScrollView
     private lateinit var candidateContainer: LinearLayout
     private lateinit var fnRow: LinearLayout
+    private lateinit var keyRows: List<LinearLayout>
     private lateinit var languageKey: TextView
     private lateinit var voiceKey: TextView
 
     // ── Prefs ────────────────────────────────────────────────────────────────
     private val prefs by lazy { PreferenceManager.getDefaultSharedPreferences(this) }
-    private val chineseEngine = NaturalShuangpinEngine()
+    private val chineseEngine by lazy { NaturalShuangpinEngine(ChineseLexiconStore(applicationContext)) }
     private var chineseMode = false
+    private var layoutMode = KeyboardLayoutMode.COMPACT_EN
     private var voiceClient: VolcengineVoiceInputClient? = null
     private var voiceListening = false
     private var voiceStarting = false
@@ -66,6 +252,7 @@ class TermKeyIMEService : InputMethodService() {
     private var voicePreviewText = ""
     private var voicePreviewUsesComposing = false
     private var voiceBlinkAnimation: AlphaAnimation? = null
+    private val repeatHandler = Handler(Looper.getMainLooper())
 
     // ── Vibrator ─────────────────────────────────────────────────────────────
     private val vibrator: Vibrator? by lazy {
@@ -96,9 +283,17 @@ class TermKeyIMEService : InputMethodService() {
         rootView = layoutInflater.inflate(R.layout.keyboard_view, null)
         macroScrollView = rootView.findViewById(R.id.macro_scroll)
         macroContainer = rootView.findViewById(R.id.macro_container)
+        macroSeparator = rootView.findViewById(R.id.macro_separator)
         candidateScrollView = rootView.findViewById(R.id.candidate_scroll)
         candidateContainer = rootView.findViewById(R.id.candidate_container)
         fnRow = rootView.findViewById(R.id.fn_row)
+        keyRows = listOf(
+            rootView.findViewById(R.id.key_row_1),
+            rootView.findViewById(R.id.key_row_2),
+            rootView.findViewById(R.id.key_row_3),
+            rootView.findViewById(R.id.key_row_4),
+            rootView.findViewById(R.id.key_row_5),
+        )
         languageKey = rootView.findViewById(R.id.key_lang)
         voiceKey = rootView.findViewById(R.id.key_mic)
 
@@ -119,11 +314,13 @@ class TermKeyIMEService : InputMethodService() {
 
     override fun onFinishInputView(finishingInput: Boolean) {
         super.onFinishInputView(finishingInput)
+        stopDeleteRepeats()
         cancelVoiceInput()
         clearChineseInput(commitCurrent = false)
     }
 
     override fun onDestroy() {
+        stopDeleteRepeats()
         cancelVoiceInput()
         clearChineseInput(commitCurrent = false)
         super.onDestroy()
@@ -132,15 +329,7 @@ class TermKeyIMEService : InputMethodService() {
     // ── Preferences ──────────────────────────────────────────────────────────
 
     private fun applyPreferences() {
-        val showFn = prefs.getBoolean("show_fn_row", true)
-        fnRow.visibility = if (showFn) View.VISIBLE else View.GONE
-
-        val showMacro = prefs.getBoolean("show_macro_bar", true)
-        macroScrollView.visibility = if (showMacro) View.VISIBLE else View.GONE
-
-        val showVoice = prefs.getBoolean("show_voice_key", true)
-        voiceKey.visibility = if (showVoice) View.VISIBLE else View.GONE
-        updateChineseUi()
+        updateKeyboardLayoutUi()
         updateVoiceKeyUI()
     }
 
@@ -239,11 +428,23 @@ class TermKeyIMEService : InputMethodService() {
 
     private fun wireKeys() {
         // ── Modifier keys ──
-        wireModifierKey(R.id.key_ctrl) {
+        rootView.findViewById<View>(R.id.key_ctrl)?.setOnClickListener {
+            if (handleCompactPunctuationKey(R.id.key_ctrl)) {
+                feedbackVibrate(16)
+                feedbackSound()
+                return@setOnClickListener
+            }
+            feedbackVibrate(15)
             ctrlActive = !ctrlActive
             updateModifierUI()
         }
-        wireModifierKey(R.id.key_alt) {
+        rootView.findViewById<View>(R.id.key_alt)?.setOnClickListener {
+            if (handleCompactPunctuationKey(R.id.key_alt)) {
+                feedbackVibrate(16)
+                feedbackSound()
+                return@setOnClickListener
+            }
+            feedbackVibrate(15)
             altActive = !altActive
             updateModifierUI()
         }
@@ -251,19 +452,35 @@ class TermKeyIMEService : InputMethodService() {
             shiftActive = !shiftActive
             updateModifierUI()
         }
-        wireModifierKey(R.id.key_lang) {
-            toggleLanguageMode()
+        rootView.findViewById<View>(R.id.key_lang)?.apply {
+            setOnClickListener {
+                feedbackVibrate(15)
+                toggleLanguageMode()
+            }
+            setOnLongClickListener {
+                feedbackVibrate(20)
+                toggleFullLayoutMode()
+                true
+            }
         }
 
         // ── Special keys ──
-        wireKey(R.id.key_esc)       { sendEscape() }
-        wireKey(R.id.key_tab)       { sendTab() }
+        wireKey(R.id.key_esc)       {
+            if (!handleCompactPunctuationKey(R.id.key_esc)) {
+                sendEscape()
+            }
+        }
+        wireKey(R.id.key_tab)       {
+            if (!handleCompactPunctuationKey(R.id.key_tab)) {
+                sendTab()
+            }
+        }
         wireKey(R.id.key_enter)     { sendEnter() }
-        wireKey(R.id.key_backspace) { sendBackspace() }
+        wireDeleteKey(R.id.key_backspace, ::performBackspace, ::clearAllBeforeCursor)
         wireKey(R.id.key_space)     { sendSpace() }
-        wireKey(R.id.key_delete)    { sendKeyCode(KeyEvent.KEYCODE_FORWARD_DEL) }
+        wireDeleteKey(R.id.key_delete, ::performForwardDelete, ::clearAllAfterCursor)
         rootView.findViewById<View>(R.id.key_mic)?.setOnClickListener {
-            feedbackVibrate()
+            feedbackVibrate(24)
             feedbackSound()
             toggleVoiceInput()
         }
@@ -272,7 +489,11 @@ class TermKeyIMEService : InputMethodService() {
         wireKey(R.id.key_arrow_up)    { sendKeyCode(KeyEvent.KEYCODE_DPAD_UP) }
         wireKey(R.id.key_arrow_down)  { sendKeyCode(KeyEvent.KEYCODE_DPAD_DOWN) }
         wireKey(R.id.key_arrow_left)  { sendKeyCode(KeyEvent.KEYCODE_DPAD_LEFT) }
-        wireKey(R.id.key_arrow_right) { sendKeyCode(KeyEvent.KEYCODE_DPAD_RIGHT) }
+        wireKey(R.id.key_arrow_right) {
+            if (!handleCompactBottomEnterKey()) {
+                sendKeyCode(KeyEvent.KEYCODE_DPAD_RIGHT)
+            }
+        }
         wireKey(R.id.key_page_up)     { sendKeyCode(KeyEvent.KEYCODE_PAGE_UP) }
         wireKey(R.id.key_page_down)   { sendKeyCode(KeyEvent.KEYCODE_PAGE_DOWN) }
         wireKey(R.id.key_home)        { sendKeyCode(KeyEvent.KEYCODE_MOVE_HOME) }
@@ -353,6 +574,11 @@ class TermKeyIMEService : InputMethodService() {
             // Long-press for alternate symbol (if enabled)
             if (prefs.getBoolean("long_press_extra", true)) {
                 view.setOnLongClickListener {
+                    if (handleCompactPunctuationKey(viewId)) {
+                        feedbackVibrate(20)
+                        feedbackSound()
+                        return@setOnLongClickListener true
+                    }
                     feedbackVibrate(30)
                     handleCharacterInput(chars.first, chars.second, useAlternate = true)
                     true
@@ -365,6 +591,11 @@ class TermKeyIMEService : InputMethodService() {
                     when (event.action) {
                         MotionEvent.ACTION_DOWN -> { startY = event.y; false }
                         MotionEvent.ACTION_UP -> {
+                            if (handleCompactPunctuationKey(viewId)) {
+                                feedbackVibrate(16)
+                                feedbackSound()
+                                return@setOnTouchListener true
+                            }
                             val dy = startY - event.y
                             if (dy > 30) { // swipe up
                                 feedbackVibrate(20)
@@ -379,6 +610,15 @@ class TermKeyIMEService : InputMethodService() {
                 }
             }
             view.setOnClickListener {
+                if (handleCompactPunctuationKey(viewId)) {
+                    feedbackVibrate(16)
+                    feedbackSound()
+                    if (shiftActive) {
+                        shiftActive = false
+                        updateModifierUI()
+                    }
+                    return@setOnClickListener
+                }
                 feedbackVibrate()
                 feedbackSound()
                 handleCharacterInput(chars.first, chars.second, useAlternate = shiftActive)
@@ -478,18 +718,42 @@ class TermKeyIMEService : InputMethodService() {
     }
 
     private fun sendBackspace() {
+        feedbackVibrate()
+        feedbackSound()
+        performBackspace()
+    }
+
+    private fun performBackspace() {
         if (chineseMode && chineseEngine.hasPending()) {
             updateChineseState(chineseEngine.backspace())
             return
         }
-        feedbackVibrate()
-        feedbackSound()
         val ic = currentInputConnection ?: return
         val selectedText = ic.getSelectedText(0)
         if (!selectedText.isNullOrEmpty()) {
             ic.commitText("", 1)
         } else {
             ic.deleteSurroundingText(1, 0)
+        }
+    }
+
+    private fun sendDelete() {
+        feedbackVibrate()
+        feedbackSound()
+        performForwardDelete()
+    }
+
+    private fun performForwardDelete() {
+        if (chineseMode && chineseEngine.hasPending()) {
+            updateChineseState(chineseEngine.backspace())
+            return
+        }
+        val ic = currentInputConnection ?: return
+        val selectedText = ic.getSelectedText(0)
+        when {
+            !selectedText.isNullOrEmpty() -> ic.commitText("", 1)
+            !ic.getTextAfterCursor(1, 0).isNullOrEmpty() -> ic.deleteSurroundingText(0, 1)
+            else -> sendKeyCodeInternal(KeyEvent.KEYCODE_FORWARD_DEL, playFeedback = false)
         }
     }
 
@@ -514,11 +778,17 @@ class TermKeyIMEService : InputMethodService() {
     }
 
     private fun sendKeyCode(keyCode: Int) {
+        sendKeyCodeInternal(keyCode, playFeedback = true)
+    }
+
+    private fun sendKeyCodeInternal(keyCode: Int, playFeedback: Boolean) {
         if (chineseMode && chineseEngine.hasPending()) {
             commitChineseSelection()
         }
-        feedbackVibrate()
-        feedbackSound()
+        if (playFeedback) {
+            feedbackVibrate()
+            feedbackSound()
+        }
         val ic = currentInputConnection ?: return
         var meta = 0
         if (ctrlActive) {
@@ -549,7 +819,7 @@ class TermKeyIMEService : InputMethodService() {
         // Update Shift key visual label if needed
         val shiftView = rootView.findViewById<TextView>(R.id.key_shift)
         shiftView?.alpha = if (shiftActive) 1.0f else 0.7f
-        updateChineseUi()
+        updateKeyboardLayoutUi()
         updateVoiceKeyUI()
     }
 
@@ -577,6 +847,161 @@ class TermKeyIMEService : InputMethodService() {
         }
     }
 
+    private fun wireDeleteKey(viewId: Int, repeatAction: () -> Unit, clearAction: () -> Unit) {
+        val view = rootView.findViewById<View>(viewId) ?: return
+        val swipeThresholdPx = 30f * resources.displayMetrics.density
+        var startY = 0f
+        var repeatStarted = false
+        var swipeTriggered = false
+        var repeatRunnable: Runnable? = null
+
+        view.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    feedbackVibrate()
+                    feedbackSound()
+                    startY = event.y
+                    repeatStarted = false
+                    swipeTriggered = false
+                    repeatRunnable = object : Runnable {
+                        override fun run() {
+                            repeatStarted = true
+                            repeatAction()
+                            repeatHandler.postDelayed(this, DELETE_REPEAT_INTERVAL_MS)
+                        }
+                    }
+                    repeatHandler.postDelayed(repeatRunnable!!, DELETE_REPEAT_INITIAL_DELAY_MS)
+                    true
+                }
+
+                MotionEvent.ACTION_MOVE -> {
+                    if (!swipeTriggered && startY - event.y > swipeThresholdPx) {
+                        swipeTriggered = true
+                        repeatRunnable?.let(repeatHandler::removeCallbacks)
+                        clearAction()
+                    }
+                    true
+                }
+
+                MotionEvent.ACTION_UP -> {
+                    repeatRunnable?.let(repeatHandler::removeCallbacks)
+                    if (!swipeTriggered && startY - event.y > swipeThresholdPx) {
+                        clearAction()
+                    } else if (!swipeTriggered && !repeatStarted) {
+                        repeatAction()
+                    }
+                    repeatRunnable = null
+                    true
+                }
+
+                MotionEvent.ACTION_CANCEL -> {
+                    repeatRunnable?.let(repeatHandler::removeCallbacks)
+                    repeatRunnable = null
+                    true
+                }
+
+                else -> false
+            }
+        }
+    }
+
+    private fun stopDeleteRepeats() {
+        repeatHandler.removeCallbacksAndMessages(null)
+    }
+
+    private fun handleCompactPunctuationKey(viewId: Int): Boolean {
+        val output = compactPunctuationOutput(viewId) ?: return false
+        sendLiteralText(output)
+        return true
+    }
+
+    private fun handleCompactBottomEnterKey(): Boolean {
+        if (layoutMode == KeyboardLayoutMode.FULL) return false
+        performEnterWithoutFeedback()
+        return true
+    }
+
+    private fun performEnterWithoutFeedback() {
+        if (chineseMode && chineseEngine.hasPending()) {
+            commitChineseSelection()
+        }
+        val ic = currentInputConnection ?: return
+        if (ctrlActive) {
+            ic.commitText("\r", 1)
+            ctrlActive = false
+            updateModifierUI()
+        } else {
+            ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+            ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
+        }
+    }
+
+    private fun compactPunctuationOutput(viewId: Int): String? {
+        if (layoutMode == KeyboardLayoutMode.FULL) return null
+        return when (viewId) {
+            R.id.key_esc -> if (chineseMode) "，" else ","
+            R.id.key_alt -> if (chineseMode) "。" else "."
+            R.id.key_comma -> if (chineseMode) "？" else "?"
+            R.id.key_period -> if (chineseMode) "！" else "!"
+            else -> null
+        }
+    }
+
+    private fun sendLiteralText(text: String) {
+        if (chineseMode && chineseEngine.hasPending()) {
+            commitChineseSelection()
+        }
+        currentInputConnection?.commitText(text, 1)
+    }
+
+    private fun clearAllBeforeCursor() {
+        if (chineseMode && chineseEngine.hasPending()) {
+            clearChineseInput(commitCurrent = false)
+            return
+        }
+
+        val ic = currentInputConnection ?: return
+        ic.beginBatchEdit()
+        try {
+            val selectedText = ic.getSelectedText(0)
+            if (!selectedText.isNullOrEmpty()) {
+                ic.commitText("", 1)
+            }
+            while (true) {
+                val before = ic.getTextBeforeCursor(CLEAR_TEXT_CHUNK_SIZE, 0)
+                if (before.isNullOrEmpty()) break
+                ic.deleteSurroundingText(before.length, 0)
+                if (before.length < CLEAR_TEXT_CHUNK_SIZE) break
+            }
+        } finally {
+            ic.endBatchEdit()
+        }
+    }
+
+    private fun clearAllAfterCursor() {
+        if (chineseMode && chineseEngine.hasPending()) {
+            clearChineseInput(commitCurrent = false)
+            return
+        }
+
+        val ic = currentInputConnection ?: return
+        ic.beginBatchEdit()
+        try {
+            val selectedText = ic.getSelectedText(0)
+            if (!selectedText.isNullOrEmpty()) {
+                ic.commitText("", 1)
+            }
+            while (true) {
+                val after = ic.getTextAfterCursor(CLEAR_TEXT_CHUNK_SIZE, 0)
+                if (after.isNullOrEmpty()) break
+                ic.deleteSurroundingText(0, after.length)
+                if (after.length < CLEAR_TEXT_CHUNK_SIZE) break
+            }
+        } finally {
+            ic.endBatchEdit()
+        }
+    }
+
     private fun handleCharacterInput(primary: Char, alternate: Char, useAlternate: Boolean) {
         val isLetter = primary in 'a'..'z'
         if (chineseMode && isLetter && !ctrlActive && !altActive) {
@@ -593,8 +1018,23 @@ class TermKeyIMEService : InputMethodService() {
 
     private fun toggleLanguageMode() {
         chineseMode = !chineseMode
+        layoutMode = defaultLayoutModeForLanguage()
         clearChineseInput(commitCurrent = false)
-        updateChineseUi()
+        updateKeyboardLayoutUi()
+    }
+
+    private fun toggleFullLayoutMode() {
+        layoutMode = if (layoutMode == KeyboardLayoutMode.FULL) {
+            defaultLayoutModeForLanguage()
+        } else {
+            KeyboardLayoutMode.FULL
+        }
+        clearChineseInput(commitCurrent = false)
+        updateKeyboardLayoutUi()
+    }
+
+    private fun defaultLayoutModeForLanguage(): KeyboardLayoutMode {
+        return if (chineseMode) KeyboardLayoutMode.COMPACT_ZH else KeyboardLayoutMode.COMPACT_EN
     }
 
     private fun updateChineseState(state: ChineseInputState) {
@@ -605,7 +1045,7 @@ class TermKeyIMEService : InputMethodService() {
             ic?.setComposingText(state.previewText, 1)
         }
         rebuildCandidateBar(state.candidates)
-        updateChineseUi()
+        updateKeyboardLayoutUi()
     }
 
     private fun rebuildCandidateBar(candidates: List<String>) {
@@ -644,6 +1084,7 @@ class TermKeyIMEService : InputMethodService() {
         currentInputConnection?.apply {
             if (!resolved.isNullOrBlank()) {
                 commitText(resolved, 1)
+                chineseEngine.recordSelection(state, resolved)
             } else {
                 finishComposingText()
             }
@@ -651,7 +1092,7 @@ class TermKeyIMEService : InputMethodService() {
 
         chineseEngine.clear()
         rebuildCandidateBar(emptyList())
-        updateChineseUi()
+        updateKeyboardLayoutUi()
     }
 
     private fun clearChineseInput(commitCurrent: Boolean) {
@@ -664,17 +1105,158 @@ class TermKeyIMEService : InputMethodService() {
                 currentInputConnection?.finishComposingText()
             }
             rebuildCandidateBar(emptyList())
-            updateChineseUi()
+            updateKeyboardLayoutUi()
         }
     }
 
-    private fun updateChineseUi() {
+    private fun updateKeyboardLayoutUi() {
         if (!::languageKey.isInitialized || !::candidateScrollView.isInitialized) return
+        val showVoice = prefs.getBoolean("show_voice_key", true)
+        val showMacro = prefs.getBoolean("show_macro_bar", true)
+        val showFn = prefs.getBoolean("show_fn_row", true)
+        val compactInvisibleKeys = setOf(
+            R.id.key_ctrl,
+            R.id.key_quote,
+        )
+        val visibleCompactKeys = when (layoutMode) {
+            KeyboardLayoutMode.COMPACT_ZH -> COMPACT_ZH_KEY_IDS
+            KeyboardLayoutMode.COMPACT_EN -> COMPACT_EN_KEY_IDS
+            KeyboardLayoutMode.FULL -> emptySet()
+        }
+
         languageKey.isActivated = chineseMode
         languageKey.text = getString(if (chineseMode) R.string.key_lang_zh else R.string.key_lang_en)
-        if (!chineseMode) {
+        applyKeyboardRowHeights()
+        applyDynamicKeyLabels()
+        applyDynamicKeyWeights()
+        when (layoutMode) {
+            KeyboardLayoutMode.FULL -> {
+                ALL_KEY_IDS.forEach { keyId ->
+                    rootView.findViewById<View>(keyId)?.visibility = View.VISIBLE
+                }
+                macroScrollView.visibility = if (showMacro) View.VISIBLE else View.GONE
+                macroSeparator.visibility = if (showMacro) View.VISIBLE else View.GONE
+                fnRow.visibility = if (showFn) View.VISIBLE else View.GONE
+            }
+
+            KeyboardLayoutMode.COMPACT_ZH,
+            KeyboardLayoutMode.COMPACT_EN -> {
+                ALL_KEY_IDS.forEach { keyId ->
+                    rootView.findViewById<View>(keyId)?.visibility =
+                        when {
+                            visibleCompactKeys.contains(keyId) -> View.VISIBLE
+                            compactInvisibleKeys.contains(keyId) -> View.INVISIBLE
+                            else -> View.GONE
+                        }
+                }
+                macroScrollView.visibility = View.GONE
+                macroSeparator.visibility = View.GONE
+                fnRow.visibility = View.GONE
+            }
+        }
+
+        voiceKey.visibility = if (showVoice && (layoutMode == KeyboardLayoutMode.FULL || visibleCompactKeys.contains(R.id.key_mic))) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+
+        if (chineseMode) {
+            candidateScrollView.visibility = View.VISIBLE
+        } else {
             candidateScrollView.visibility = View.GONE
         }
+        updateVoiceKeyUI()
+    }
+
+    private fun applyDynamicKeyLabels() {
+        val compactLabels = if (layoutMode == KeyboardLayoutMode.FULL) {
+            emptyMap()
+        } else if (chineseMode) {
+            mapOf(
+                R.id.key_esc to "，",
+                R.id.key_alt to "。",
+                R.id.key_comma to "？",
+                R.id.key_period to "！",
+                R.id.key_arrow_right to "↩",
+                R.id.key_delete to "Del",
+            )
+        } else {
+            mapOf(
+                R.id.key_esc to ",",
+                R.id.key_alt to ".",
+                R.id.key_comma to "?",
+                R.id.key_period to "!",
+                R.id.key_arrow_right to "↩",
+                R.id.key_delete to "Del",
+            )
+        }
+
+        val defaultLabels = mapOf(
+            R.id.key_tab to "TAB⇥",
+            R.id.key_backslash to "\\",
+            R.id.key_ctrl to "CTRL",
+            R.id.key_alt to "ALT",
+            R.id.key_quote to "'",
+            R.id.key_esc to "ESC",
+            R.id.key_comma to ",",
+            R.id.key_period to ".",
+            R.id.key_slash to "/",
+            R.id.key_arrow_right to "→",
+            R.id.key_delete to "Del",
+        )
+
+        defaultLabels.forEach { (viewId, defaultLabel) ->
+            val label = compactLabels[viewId] ?: defaultLabel
+            rootView.findViewById<TextView>(viewId)?.text = label
+        }
+    }
+
+    private fun applyDynamicKeyWeights() {
+        updateKeyWeight(R.id.key_enter, 2.0f)
+        updateKeyWeight(R.id.key_arrow_right, if (layoutMode == KeyboardLayoutMode.FULL) 1.0f else 1.4f)
+        updateKeyWeight(R.id.key_ctrl, if (layoutMode == KeyboardLayoutMode.FULL) 1.5f else 0.5f)
+        updateKeyWeight(R.id.key_quote, if (layoutMode == KeyboardLayoutMode.FULL) 1.0f else 0.5f)
+        updateKeyWeight(R.id.key_esc, if (layoutMode == KeyboardLayoutMode.FULL) 1.3f else 1.0f)
+        updateKeyWeight(R.id.key_alt, if (layoutMode == KeyboardLayoutMode.FULL) 1.3f else 1.0f)
+    }
+
+    private fun applyKeyboardRowHeights() {
+        if (!::keyRows.isInitialized) return
+        val baseHeightDp = prefs.getString("key_height", "42")?.toIntOrNull() ?: 42
+        val effectiveHeightDp = when (layoutMode) {
+            KeyboardLayoutMode.FULL -> baseHeightDp
+            KeyboardLayoutMode.COMPACT_ZH,
+            KeyboardLayoutMode.COMPACT_EN -> nextCompactHeightDp(baseHeightDp)
+        }
+        val rowHeightPx = (effectiveHeightDp * resources.displayMetrics.density).toInt()
+        keyRows.forEach { row ->
+            row.updateLayoutHeight(rowHeightPx)
+        }
+    }
+
+    private fun nextCompactHeightDp(baseHeightDp: Int): Int {
+        return when {
+            baseHeightDp < 42 -> 42
+            baseHeightDp < 50 -> 50
+            baseHeightDp < 58 -> 58
+            else -> 58
+        }
+    }
+
+    private fun View.updateLayoutHeight(heightPx: Int) {
+        val params = layoutParams ?: return
+        if (params.height == heightPx) return
+        params.height = heightPx
+        layoutParams = params
+    }
+
+    private fun updateKeyWeight(viewId: Int, weight: Float) {
+        val view = rootView.findViewById<View>(viewId) ?: return
+        val params = view.layoutParams as? LinearLayout.LayoutParams ?: return
+        if (params.weight == weight) return
+        params.weight = weight
+        view.layoutParams = params
     }
 
     private fun toggleVoiceInput() {
@@ -713,6 +1295,7 @@ class TermKeyIMEService : InputMethodService() {
                         voiceStopping = false
                         voiceClient = null
                     }
+                    feedbackVibrate(if (isListening) 30 else 18)
                     updateVoiceKeyUI()
                     if (isListening) {
                         showToast(R.string.voice_listening)
@@ -794,7 +1377,8 @@ class TermKeyIMEService : InputMethodService() {
         if (!::voiceKey.isInitialized) return
         val active = voiceStarting || voiceListening || voiceStopping
         voiceKey.isActivated = active
-        voiceKey.alpha = if (active) 1.0f else 0.85f
+        voiceKey.alpha = if (active) 1.0f else 0.9f
+        voiceKey.translationZ = if (voiceListening) 6f else 0f
         voiceKey.text = getString(
             when {
                 voiceStopping -> R.string.key_mic_connecting
@@ -810,8 +1394,8 @@ class TermKeyIMEService : InputMethodService() {
         if (!::voiceKey.isInitialized) return
         if (voiceListening && !voiceStopping) {
             if (voiceBlinkAnimation == null) {
-                voiceBlinkAnimation = AlphaAnimation(1.0f, 0.35f).apply {
-                    duration = 700
+                voiceBlinkAnimation = AlphaAnimation(1.0f, 0.12f).apply {
+                    duration = 420
                     repeatMode = Animation.REVERSE
                     repeatCount = Animation.INFINITE
                     interpolator = LinearInterpolator()

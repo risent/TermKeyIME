@@ -1,0 +1,5 @@
+Curated offline Chinese lexicon seeded from:
+https://github.com/amzxyz/rime_wanxiang
+
+This app bundles a trimmed subset for local phrase lookup and frequency ranking.
+Refer to the upstream project for dictionary provenance and license details.

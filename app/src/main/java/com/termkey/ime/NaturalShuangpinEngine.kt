@@ -8,7 +8,9 @@ data class ChineseInputState(
     val hasPendingTail: Boolean,
 )
 
-class NaturalShuangpinEngine {
+class NaturalShuangpinEngine(
+    private val lexiconStore: ChineseLexiconStore? = null,
+) {
 
     private val rawCode = StringBuilder()
 
@@ -30,6 +32,12 @@ class NaturalShuangpinEngine {
     }
 
     fun hasPending(): Boolean = rawCode.isNotEmpty()
+
+    fun recordSelection(state: ChineseInputState, text: String) {
+        if (text.isBlank() || state.candidates.isEmpty() || state.hasPendingTail) return
+        val pinyinKey = state.decodedPinyin.takeIf { it.isNotBlank() && !it.contains(' ') } ?: return
+        lexiconStore?.recordSelection(pinyinKey, text)
+    }
 
     fun currentState(): ChineseInputState {
         val code = rawCode.toString()
@@ -169,6 +177,10 @@ class NaturalShuangpinEngine {
 
     private fun lookupCandidates(syllables: List<String>): List<String> {
         if (syllables.isEmpty()) return emptyList()
+
+        lexiconStore?.lookupCandidates(syllables)?.takeIf { it.isNotEmpty() }?.let {
+            return it
+        }
 
         val explicit = phraseCandidates[syllables.joinToString("'")].orEmpty()
         val generated = when (syllables.size) {
