@@ -75,6 +75,7 @@ class TermKeyIMEService : InputMethodService() {
         macroContainer = rootView.findViewById(R.id.macro_container)
         fnRow = rootView.findViewById(R.id.fn_row)
 
+        initializeKeyLabels()
         applyPreferences()
         buildMacroBar()
         wireKeys()
@@ -116,6 +117,74 @@ class TermKeyIMEService : InputMethodService() {
                 true
             }
             macroContainer.addView(btn)
+        }
+    }
+
+    private fun initializeKeyLabels() {
+        val labels = mapOf(
+            R.id.key_grave to "`",
+            R.id.key_1 to "1",
+            R.id.key_2 to "2",
+            R.id.key_3 to "3",
+            R.id.key_4 to "4",
+            R.id.key_5 to "5",
+            R.id.key_6 to "6",
+            R.id.key_7 to "7",
+            R.id.key_8 to "8",
+            R.id.key_9 to "9",
+            R.id.key_0 to "0",
+            R.id.key_minus to "-",
+            R.id.key_equals to "=",
+            R.id.key_q to "Q",
+            R.id.key_w to "W",
+            R.id.key_e to "E",
+            R.id.key_r to "R",
+            R.id.key_t to "T",
+            R.id.key_y to "Y",
+            R.id.key_u to "U",
+            R.id.key_i to "I",
+            R.id.key_o to "O",
+            R.id.key_p to "P",
+            R.id.key_lbracket to "[",
+            R.id.key_rbracket to "]",
+            R.id.key_backslash to "\\",
+            R.id.key_a to "A",
+            R.id.key_s to "S",
+            R.id.key_d to "D",
+            R.id.key_f_key to "F",
+            R.id.key_g to "G",
+            R.id.key_h to "H",
+            R.id.key_j to "J",
+            R.id.key_k to "K",
+            R.id.key_l to "L",
+            R.id.key_semicolon to ";",
+            R.id.key_quote to "'",
+            R.id.key_z to "Z",
+            R.id.key_x to "X",
+            R.id.key_c to "C",
+            R.id.key_v to "V",
+            R.id.key_b to "B",
+            R.id.key_n to "N",
+            R.id.key_m to "M",
+            R.id.key_comma to ",",
+            R.id.key_period to ".",
+            R.id.key_slash to "/",
+            R.id.key_f1 to "F1",
+            R.id.key_f2 to "F2",
+            R.id.key_f3 to "F3",
+            R.id.key_f4 to "F4",
+            R.id.key_f5 to "F5",
+            R.id.key_f6 to "F6",
+            R.id.key_f7 to "F7",
+            R.id.key_f8 to "F8",
+            R.id.key_f9 to "F9",
+            R.id.key_f10 to "F10",
+            R.id.key_f11 to "F11",
+            R.id.key_f12 to "F12",
+        )
+
+        labels.forEach { (viewId, label) ->
+            rootView.findViewById<TextView>(viewId)?.text = label
         }
     }
 
