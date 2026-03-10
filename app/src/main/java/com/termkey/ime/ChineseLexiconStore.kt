@@ -33,6 +33,7 @@ class ChineseLexiconStore(
         private const val DB_NAME = "chinese_lexicon.db"
         private const val DB_VERSION = 2
         private const val USER_SCORE_INCREMENT = 240
+        private const val MAX_SENTENCE_SYLLABLES = 8
         private const val MAX_SPAN_SYLLABLES = 6
         private const val PATH_BEAM_WIDTH = 16
         private const val JOIN_PENALTY = 32
@@ -56,30 +57,71 @@ class ChineseLexiconStore(
         }
     }
 
-    fun lookupCandidates(syllables: List<String>, limit: Int = EXACT_QUERY_LIMIT): List<String> {
-        if (syllables.isEmpty()) return emptyList()
+    fun lookupCandidates(syllables: List<String>, limit: Int = EXACT_QUERY_LIMIT): ChineseCandidateQueryResult {
+        if (syllables.isEmpty()) {
+            return ChineseCandidateQueryResult(emptyList(), ChineseCandidateKind.NONE)
+        }
         val resolvedLimit = if (syllables.size == 1) max(limit, SINGLE_SYLLABLE_LIMIT) else limit
         val fullKey = syllables.joinToString("'")
         val exactMatches = queryEntries(fullKey, resolvedLimit)
-        val bestPaths = buildBestPaths(syllables)
+        val bestPaths = if (syllables.size <= MAX_SENTENCE_SYLLABLES) {
+            buildBestPaths(syllables)
+        } else {
+            emptyList()
+        }
 
-        val scored = linkedMapOf<String, Int>()
+        data class ScoredCandidate(
+            val text: String,
+            val score: Int,
+            val kind: ChineseCandidateKind,
+            val segmentCount: Int,
+        )
+        val scored = linkedMapOf<String, ScoredCandidate>()
         exactMatches.forEach { entry ->
-            val score = scoreEntry(entry, isWholeSpan = true)
-            scored[entry.text] = max(scored[entry.text] ?: Int.MIN_VALUE, score)
+            val kind = classifyExactCandidate(entry, syllables.size)
+            val score = scoreEntry(entry, isWholeSpan = true, candidateKind = kind)
+            val current = scored[entry.text]
+            if (current == null || score > current.score) {
+                scored[entry.text] = ScoredCandidate(
+                    text = entry.text,
+                    score = score,
+                    kind = kind,
+                    segmentCount = 1,
+                )
+            }
         }
         bestPaths.forEach { path ->
-            scored[path.text] = max(scored[path.text] ?: Int.MIN_VALUE, path.score)
+            val kind = if (syllables.size >= 3 && path.segmentCount > 1) {
+                ChineseCandidateKind.SENTENCE
+            } else if (path.segmentCount == 1) {
+                ChineseCandidateKind.PHRASE
+            } else {
+                ChineseCandidateKind.FALLBACK
+            }
+            val current = scored[path.text]
+            if (current == null || path.score > current.score) {
+                scored[path.text] = ScoredCandidate(
+                    text = path.text,
+                    score = path.score,
+                    kind = kind,
+                    segmentCount = path.segmentCount,
+                )
+            }
         }
 
-        return scored.entries
+        val ordered = scored.values
             .sortedWith(
-                compareByDescending<Map.Entry<String, Int>> { it.value }
-                    .thenByDescending { it.key.length }
-                    .thenBy { it.key },
+                compareByDescending<ScoredCandidate> { candidateKindPriority(it.kind) }
+                    .thenBy { it.segmentCount }
+                    .thenByDescending { it.score }
+                    .thenByDescending { it.text.length }
+                    .thenBy { it.text },
             )
-            .map { it.key }
+        val candidates = ordered
+            .map { it.text }
             .take(resolvedLimit)
+        val primaryKind = ordered.firstOrNull()?.kind ?: ChineseCandidateKind.NONE
+        return ChineseCandidateQueryResult(candidates, primaryKind)
     }
 
     fun recordSelection(pinyinKey: String, text: String) {
@@ -243,7 +285,11 @@ class ChineseLexiconStore(
                     spanEntries.forEach { entry ->
                         candidates += CandidatePath(
                             text = entry.text,
-                            score = scoreEntry(entry, isWholeSpan = start == 0),
+                            score = scoreEntry(
+                                entry,
+                                isWholeSpan = start == 0,
+                                candidateKind = ChineseCandidateKind.SENTENCE,
+                            ),
                             segmentCount = 1,
                         )
                     }
@@ -253,7 +299,15 @@ class ChineseLexiconStore(
                 val suffixes = pathCache[end]
                 if (suffixes.isEmpty()) continue
                 spanEntries.forEach { entry ->
-                    val entryScore = scoreEntry(entry, isWholeSpan = false)
+                    val entryScore = scoreEntry(
+                        entry,
+                        isWholeSpan = false,
+                        candidateKind = if (syllables.size >= 3 && end - start >= 2) {
+                            ChineseCandidateKind.SENTENCE
+                        } else {
+                            ChineseCandidateKind.PHRASE
+                        },
+                    )
                     suffixes.take(SPAN_QUERY_LIMIT).forEach { suffix ->
                         candidates += CandidatePath(
                             text = entry.text + suffix.text,
@@ -279,11 +333,38 @@ class ChineseLexiconStore(
         return pathCache.first()
     }
 
-    private fun scoreEntry(entry: LexiconEntry, isWholeSpan: Boolean): Int {
+    private fun scoreEntry(
+        entry: LexiconEntry,
+        isWholeSpan: Boolean,
+        candidateKind: ChineseCandidateKind,
+    ): Int {
         val lexicalScore = entry.baseFreq + entry.userScore
         val structureBonus = entry.syllableCount * 72 + entry.text.length * 12
+        val candidateKindBonus = when (candidateKind) {
+            ChineseCandidateKind.SENTENCE -> 160
+            ChineseCandidateKind.PHRASE -> 96
+            ChineseCandidateKind.FALLBACK,
+            ChineseCandidateKind.NONE -> 0
+        }
         val exactBonus = if (isWholeSpan) 96 else 0
-        return lexicalScore + structureBonus + exactBonus
+        return lexicalScore + structureBonus + candidateKindBonus + exactBonus
+    }
+
+    private fun classifyExactCandidate(entry: LexiconEntry, syllableCount: Int): ChineseCandidateKind {
+        return when {
+            syllableCount >= 3 && entry.text.length >= 3 -> ChineseCandidateKind.SENTENCE
+            entry.syllableCount >= 2 || entry.text.length >= 2 -> ChineseCandidateKind.PHRASE
+            else -> ChineseCandidateKind.FALLBACK
+        }
+    }
+
+    private fun candidateKindPriority(kind: ChineseCandidateKind): Int {
+        return when (kind) {
+            ChineseCandidateKind.SENTENCE -> 3
+            ChineseCandidateKind.PHRASE -> 2
+            ChineseCandidateKind.FALLBACK -> 1
+            ChineseCandidateKind.NONE -> 0
+        }
     }
 
     private fun queryEntries(pinyinKey: String, limit: Int): List<LexiconEntry> {
