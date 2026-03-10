@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="key_height_entries">
+        <item>Small (36dp)</item>
+        <item>Normal (42dp)</item>
+        <item>Large (50dp)</item>
+        <item>Extra Large (58dp)</item>
+    </string-array>
+    <string-array name="key_height_values">
+        <item>36</item>
+        <item>42</item>
+        <item>50</item>
+        <item>58</item>
+    </string-array>
+</resources>

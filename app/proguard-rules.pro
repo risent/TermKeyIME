@@ -1,0 +1,2 @@
+-keep class com.termkey.ime.** { *; }
+-keep class com.google.gson.** { *; }

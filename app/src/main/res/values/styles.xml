@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base key style -->
+    <style name="Key">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:layout_marginStart">2dp</item>
+        <item name="android:layout_marginEnd">2dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:background">@drawable/bg_key</item>
+        <item name="android:textColor">@color/terminal_text</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
+    <style name="Key.Wide" parent="Key">
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <style name="Key.Tab" parent="Key">
+        <item name="android:textColor">@color/terminal_green</item>
+        <item name="android:textSize">10sp</item>
+        <item name="android:fontFamily">sans-serif-condensed</item>
+        <item name="android:letterSpacing">0.05</item>
+    </style>
+
+    <style name="Key.Ctrl" parent="Key">
+        <item name="android:background">@drawable/bg_key_ctrl</item>
+        <item name="android:textColor">@color/terminal_amber</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:fontFamily">sans-serif-condensed</item>
+        <item name="android:letterSpacing">0.08</item>
+    </style>
+
+    <style name="Key.Alt" parent="Key">
+        <item name="android:background">@drawable/bg_key_alt</item>
+        <item name="android:textColor">@color/terminal_cyan</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:fontFamily">sans-serif-condensed</item>
+        <item name="android:letterSpacing">0.08</item>
+    </style>
+
+    <style name="Key.Esc" parent="Key">
+        <item name="android:textColor">@color/terminal_red</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:fontFamily">sans-serif-condensed</item>
+        <item name="android:letterSpacing">0.08</item>
+    </style>
+
+    <style name="Key.Enter" parent="Key">
+        <item name="android:background">@drawable/bg_key_enter</item>
+        <item name="android:textColor">@color/terminal_green</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:fontFamily">sans-serif-condensed</item>
+    </style>
+
+    <style name="Key.Space" parent="Key">
+        <item name="android:textColor">@color/terminal_text_dim</item>
+        <item name="android:textSize">10sp</item>
+        <item name="android:fontFamily">sans-serif-condensed</item>
+        <item name="android:letterSpacing">0.15</item>
+    </style>
+
+    <style name="Key.Arrow" parent="Key">
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <style name="Key.Fn" parent="Key">
+        <item name="android:textColor">@color/terminal_text_dim</item>
+        <item name="android:textSize">10sp</item>
+        <item name="android:fontFamily">sans-serif-condensed</item>
+    </style>
+</resources>

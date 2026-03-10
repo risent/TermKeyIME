@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TermKey IME</string>
+    <string name="ime_name">TermKey – Linux Terminal Keyboard</string>
+    <string name="subtype_normal">English (US)</string>
+    <string name="settings_title">TermKey Settings</string>
+
+    <!-- Setup screen -->
+    <string name="setup_title">TermKey Setup</string>
+    <string name="setup_step1">Step 1: Enable TermKey in system keyboard settings</string>
+    <string name="setup_step2">Step 2: Switch to TermKey as current keyboard</string>
+    <string name="setup_btn_enable">Open Keyboard Settings</string>
+    <string name="setup_btn_switch">Switch to TermKey</string>
+    <string name="setup_btn_settings">Open TermKey Settings</string>
+    <string name="setup_done">TermKey is active! You can now use it in any app.</string>
+
+    <!-- Settings -->
+    <string name="pref_category_appearance">Appearance</string>
+    <string name="pref_category_behavior">Behavior</string>
+    <string name="pref_category_macros">Macro Bar</string>
+    <string name="pref_show_fn_row">Show F1–F12 row</string>
+    <string name="pref_show_fn_row_summary">Display function key row at top of keyboard</string>
+    <string name="pref_show_macro_bar">Show macro bar</string>
+    <string name="pref_show_macro_bar_summary">Show quick-insert command snippets above keyboard</string>
+    <string name="pref_key_height">Key height</string>
+    <string name="pref_vibrate">Vibrate on keypress</string>
+    <string name="pref_sound">Sound on keypress</string>
+    <string name="pref_sticky_mod">Sticky modifier keys</string>
+    <string name="pref_sticky_mod_summary">Tap CTRL/ALT once, then tap next key for combo</string>
+    <string name="pref_swipe">Swipe up for alternate symbol</string>
+    <string name="pref_swipe_summary">Swipe up on a key to type the symbol shown in its corner</string>
+    <string name="pref_long_press">Long-press for alternate symbol</string>
+    <string name="pref_long_press_summary">Long-press any key to type the alternate symbol</string>
+    <string name="pref_edit_macros">Edit macros</string>
+    <string name="pref_edit_macros_summary">Customize the quick-insert macro bar</string>
+    <string name="pref_reset_macros">Reset macros to defaults</string>
+
+    <!-- Keyboard labels -->
+    <string name="key_ctrl">CTRL</string>
+    <string name="key_alt">ALT</string>
+    <string name="key_tab">TAB</string>
+    <string name="key_esc">ESC</string>
+    <string name="key_enter">ENTER</string>
+    <string name="key_space">SPACE</string>
+    <string name="key_backspace">⌫</string>
+    <string name="key_shift">⇧</string>
+</resources>

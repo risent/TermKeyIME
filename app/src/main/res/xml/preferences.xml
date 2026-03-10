@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <PreferenceCategory android:title="@string/pref_category_appearance">
+        <SwitchPreferenceCompat
+            android:key="show_fn_row"
+            android:title="@string/pref_show_fn_row"
+            android:summary="@string/pref_show_fn_row_summary"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            android:key="show_macro_bar"
+            android:title="@string/pref_show_macro_bar"
+            android:summary="@string/pref_show_macro_bar_summary"
+            android:defaultValue="true" />
+        <ListPreference
+            android:key="key_height"
+            android:title="@string/pref_key_height"
+            android:entries="@array/key_height_entries"
+            android:entryValues="@array/key_height_values"
+            android:defaultValue="42" />
+        <SwitchPreferenceCompat
+            android:key="vibrate_on_keypress"
+            android:title="@string/pref_vibrate"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            android:key="sound_on_keypress"
+            android:title="@string/pref_sound"
+            android:defaultValue="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="@string/pref_category_behavior">
+        <SwitchPreferenceCompat
+            android:key="sticky_modifiers"
+            android:title="@string/pref_sticky_mod"
+            android:summary="@string/pref_sticky_mod_summary"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            android:key="swipe_for_symbols"
+            android:title="@string/pref_swipe"
+            android:summary="@string/pref_swipe_summary"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            android:key="long_press_extra"
+            android:title="@string/pref_long_press"
+            android:summary="@string/pref_long_press_summary"
+            android:defaultValue="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="@string/pref_category_macros">
+        <Preference
+            android:key="edit_macros"
+            android:title="@string/pref_edit_macros"
+            android:summary="@string/pref_edit_macros_summary" />
+        <Preference
+            android:key="reset_macros"
+            android:title="@string/pref_reset_macros" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

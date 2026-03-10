@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="key_height_default">42dp</dimen>
+    <dimen name="key_height_small">36dp</dimen>
+    <dimen name="key_height_large">50dp</dimen>
+    <dimen name="key_height_xlarge">58dp</dimen>
+    <dimen name="key_margin">2dp</dimen>
+    <dimen name="key_radius">6dp</dimen>
+    <dimen name="macro_bar_height">34dp</dimen>
+    <dimen name="fn_row_height">34dp</dimen>
+</resources>
