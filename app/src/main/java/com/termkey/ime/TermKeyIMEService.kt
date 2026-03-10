@@ -500,11 +500,7 @@ class TermKeyIMEService : InputMethodService() {
         }
 
         // ── Navigation ──
-        wireKey(R.id.key_arrow_up)    {
-            if (!handleCompactPunctuationKey(R.id.key_arrow_up)) {
-                sendKeyCode(KeyEvent.KEYCODE_DPAD_UP)
-            }
-        }
+        wireCompactBackspaceSwapKey(R.id.key_arrow_up)
         wireKey(R.id.key_arrow_down)  { sendKeyCode(KeyEvent.KEYCODE_DPAD_DOWN) }
         wireKey(R.id.key_arrow_left)  { sendKeyCode(KeyEvent.KEYCODE_DPAD_LEFT) }
         wireKey(R.id.key_arrow_right) {
@@ -942,6 +938,73 @@ class TermKeyIMEService : InputMethodService() {
         }
     }
 
+    private fun wireCompactBackspaceSwapKey(viewId: Int) {
+        val view = rootView.findViewById<View>(viewId) ?: return
+        val swipeThresholdPx = 30f * resources.displayMetrics.density
+        var startY = 0f
+        var repeatStarted = false
+        var swipeTriggered = false
+        var repeatRunnable: Runnable? = null
+
+        view.setOnTouchListener { _, event ->
+            if (layoutMode == KeyboardLayoutMode.FULL) {
+                return@setOnTouchListener false
+            }
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    feedbackVibrate()
+                    feedbackSound()
+                    startY = event.y
+                    repeatStarted = false
+                    swipeTriggered = false
+                    repeatRunnable = object : Runnable {
+                        override fun run() {
+                            repeatStarted = true
+                            performBackspace()
+                            repeatHandler.postDelayed(this, DELETE_REPEAT_INTERVAL_MS)
+                        }
+                    }
+                    repeatHandler.postDelayed(repeatRunnable!!, DELETE_REPEAT_INITIAL_DELAY_MS)
+                    true
+                }
+
+                MotionEvent.ACTION_MOVE -> {
+                    if (!swipeTriggered && startY - event.y > swipeThresholdPx) {
+                        swipeTriggered = true
+                        repeatRunnable?.let(repeatHandler::removeCallbacks)
+                        clearAllBeforeCursor()
+                    }
+                    true
+                }
+
+                MotionEvent.ACTION_UP -> {
+                    repeatRunnable?.let(repeatHandler::removeCallbacks)
+                    if (!swipeTriggered && startY - event.y > swipeThresholdPx) {
+                        clearAllBeforeCursor()
+                    } else if (!swipeTriggered && !repeatStarted) {
+                        performBackspace()
+                    }
+                    repeatRunnable = null
+                    true
+                }
+
+                MotionEvent.ACTION_CANCEL -> {
+                    repeatRunnable?.let(repeatHandler::removeCallbacks)
+                    repeatRunnable = null
+                    true
+                }
+
+                else -> false
+            }
+        }
+
+        view.setOnClickListener {
+            if (layoutMode == KeyboardLayoutMode.FULL) {
+                sendKeyCode(KeyEvent.KEYCODE_DPAD_UP)
+            }
+        }
+    }
+
     private fun stopDeleteRepeats() {
         repeatHandler.removeCallbacksAndMessages(null)
     }
@@ -977,7 +1040,7 @@ class TermKeyIMEService : InputMethodService() {
         if (layoutMode == KeyboardLayoutMode.FULL) return null
         return when (viewId) {
             R.id.key_esc -> if (chineseMode) "！" else "!"
-            R.id.key_arrow_up -> if (chineseMode) "？" else "?"
+            R.id.key_backspace -> if (chineseMode) "？" else "?"
             R.id.key_end -> if (chineseMode) "，" else ","
             R.id.key_delete -> if (chineseMode) "。" else "."
             else -> null
@@ -1315,17 +1378,19 @@ class TermKeyIMEService : InputMethodService() {
         } else if (chineseMode) {
             mapOf(
                 R.id.key_esc to "！",
-                R.id.key_arrow_up to "？",
+                R.id.key_backspace to "？",
                 R.id.key_end to "，",
                 R.id.key_delete to "。",
+                R.id.key_arrow_up to "⌫",
                 R.id.key_arrow_right to "↩",
             )
         } else {
             mapOf(
                 R.id.key_esc to "!",
-                R.id.key_arrow_up to "?",
+                R.id.key_backspace to "?",
                 R.id.key_end to ",",
                 R.id.key_delete to ".",
+                R.id.key_arrow_up to "⌫",
                 R.id.key_arrow_right to "↩",
             )
         }
@@ -1337,6 +1402,7 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_alt to "ALT",
             R.id.key_quote to "'",
             R.id.key_esc to "ESC",
+            R.id.key_backspace to "⌫",
             R.id.key_comma to ",",
             R.id.key_period to ".",
             R.id.key_end to "End",
