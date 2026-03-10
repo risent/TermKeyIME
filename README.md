@@ -1,152 +1,136 @@
-# TermKey IME — Linux Terminal Keyboard for Android
+# TermKey IME
 
-A full-featured Android Input Method Engine (IME) designed specifically for Linux terminal emulators like **Termux**, **ConnectBot**, **JuiceSSH**, and **Blink Shell**.
+Android terminal keyboard with compact Chinese/English layouts, Natural Shuangpin input, editable macros, and streaming voice input.
 
----
+## Features
 
-## ✨ Features
+- Terminal-first key behavior: sticky `Ctrl` / `Alt` / `Shift`, real control characters, `Alt` as `ESC + key`, F1-F12, arrows, PgUp/PgDn, Home/End.
+- Three keyboard layouts at runtime:
+  - `FULL`: full terminal keyboard with function row and control keys.
+  - `COMPACT_ZH`: Chinese compact layout for double-pinyin input.
+  - `COMPACT_EN`: English compact layout with letters, numbers, and common punctuation.
+- Dedicated compact symbol mode:
+  - `#+=` enters a symbol-only page.
+  - tap a symbol to insert it and return to the previous compact layout.
+- Natural Shuangpin Chinese input:
+  - offline lexicon-backed candidate lookup
+  - phrase and sentence-first candidate ordering
+  - local user frequency learning
+  - candidate bar click-to-commit
+  - `Space` confirms the first Chinese candidate by default
+- Streaming voice input using Volcengine WebSocket ASR.
+- Editable macro bar with persistent custom macros.
+- Compact-mode touch target expansion, hold-to-delete, and swipe-up clear for delete keys.
 
-| Feature | Details |
-|---|---|
-| **Sticky Ctrl / Alt / Shift** | Tap once to activate, tap again to deactivate. Color-coded highlight (amber=Ctrl, cyan=Alt, green=Shift) |
-| **True control characters** | Ctrl+C sends `0x03`, Ctrl+D sends `0x04`, etc. — exactly what terminal apps expect |
-| **Alt/Meta prefix** | Alt+key sends `ESC + key` (the standard terminal meta convention) |
-| **F1–F12 row** | Toggle-able function key row at the top |
-| **Navigation cluster** | Arrow keys, PgUp/PgDn, Home/End, Delete, Insert |
-| **Macro bar** | Horizontally scrollable quick-insert snippets: `sudo`, `grep -r`, `\| less`, `2>&1`, `chmod +x`, and 15+ more. Fully customizable. |
-| **Long-press alternate** | Long-press any key to type the symbol shown in the corner (e.g. long-press `1` → `!`) |
-| **Swipe-up alternate** | Swipe up on any key to type the alternate symbol |
-| **Haptic feedback** | Short vibration on each keypress (configurable) |
-| **Settings screen** | Control key height, show/hide rows, sticky modifiers, macro editing |
+## Current Input Behavior
 
----
+### Chinese mode
 
-## 🏗️ Project Structure
+- Tap `中/EN` to switch into Chinese mode.
+- Letter keys enter Natural Shuangpin code.
+- The candidate bar stays visible in Chinese mode.
+- The first candidate is used as composing text.
+- `Space` confirms the first candidate and clears the current input buffer.
+- `Backspace` deletes Shuangpin code first; when the buffer is empty it deletes text normally.
+- The engine supports phrase and sentence candidates, not just single characters.
 
-```
-TermKeyIME/
-├── app/
-│   ├── build.gradle
-│   └── src/main/
-│       ├── AndroidManifest.xml
-│       ├── java/com/termkey/ime/
-│       │   ├── TermKeyIMEService.kt   ← Core IME logic
-│       │   ├── MacroManager.kt        ← Macro storage & defaults
-│       │   ├── SetupActivity.kt       ← Guided setup screen
-│       │   └── SettingsActivity.kt    ← Settings / preferences
-│       └── res/
-│           ├── layout/
-│           │   ├── keyboard_view.xml  ← Full keyboard layout
-│           │   ├── macro_button.xml
-│           │   └── key_fn.xml
-│           ├── xml/
-│           │   ├── method.xml         ← IME declaration
-│           │   └── preferences.xml    ← Settings screen
-│           ├── drawable/              ← Key background states
-│           └── values/
-│               ├── strings.xml
-│               ├── colors.xml
-│               ├── themes.xml
-│               ├── styles.xml
-│               ├── dimens.xml
-│               └── arrays.xml
-├── build.gradle
-└── settings.gradle
-```
+### English mode
 
----
+- Compact English keeps letters, numbers, and common punctuation visible.
+- `FULL` mode restores the full terminal layout.
 
-## 🔨 Build Instructions
+### Symbol mode
+
+- In compact Chinese or English, tap `#+=` to enter symbol mode.
+- Symbol mode shows symbol keys only, plus the necessary control keys such as `ABC`, `Space`, `Backspace`, `Enter`, and `MIC`.
+- Tapping any symbol inserts it and returns to the previous compact layout.
+
+### Voice input
+
+- Tap `MIC` to start streaming recognition.
+- Recognition text appears live in the current input field.
+- Tap `MIC` again to stop and finalize.
+- Requires microphone permission plus Volcengine `APP ID`, `Access Token`, and `Resource ID` in settings.
+
+## Build
 
 ### Requirements
-- Android Studio Hedgehog (2023.1.1) or newer
+
+- Android Studio Hedgehog or newer
 - JDK 17
-- Android SDK 34, min SDK 26 (Android 8.0+)
+- Android SDK 34
+- minSdk 26
 
-### Steps
+### Command
 
-1. **Open the project** in Android Studio:
-   - `File → Open` → select the `TermKeyIME` folder
-
-2. **Sync Gradle** — Android Studio will prompt automatically
-
-3. **Build & install**:
-   ```bash
-   ./gradlew installDebug
-   ```
-   Or use `Run → Run 'app'` in Android Studio.
-
-4. **Enable the keyboard** on your device:
-   - Launch the **TermKey** app
-   - Tap **"Open Keyboard Settings"** and enable TermKey
-   - Tap **"Switch to TermKey"** to make it active
-
----
-
-## 📱 How to Use
-
-### Modifier keys (sticky)
-- Tap **CTRL** once → it highlights amber. Next key you press sends a control combo.
-  - `CTRL` then `C` → sends `0x03` (SIGINT in Termux)
-  - `CTRL` then `D` → sends `0x04` (EOF)
-  - `CTRL` then `Z` → sends `0x1A` (SIGTSTP)
-- Tap **ALT** once → it highlights cyan. Next key sends `ESC + key`.
-- Tap **ESC** → sends a literal `0x1B` escape character.
-
-### Macro bar
-- Scroll horizontally to see all macros
-- Tap any macro to insert that text at the cursor
-- To customize: Settings → Edit Macros
-
-### Key alternates
-- **Swipe up** on a key to type the symbol shown in its top-right corner
-- **Long-press** a key to type the alternate symbol
-
----
-
-## ⚙️ Settings
-
-| Setting | Default | Description |
-|---|---|---|
-| Show F1–F12 row | On | Toggle function key row |
-| Show macro bar | On | Toggle quick-insert bar |
-| Key height | 42dp | Small / Normal / Large / XL |
-| Vibrate on keypress | On | Haptic feedback |
-| Sound on keypress | Off | Click sound |
-| Sticky modifiers | On | Tap-to-activate Ctrl/Alt |
-| Swipe for symbols | On | Swipe up for alternate |
-| Long-press for symbol | On | Long-press for alternate |
-
----
-
-## 🔧 Extending / Customizing
-
-### Adding more macros programmatically
-Edit `MacroManager.kt` → `DEFAULT_MACROS` list:
-```kotlin
-Macro("label", "text to insert"),
+```bash
+./gradlew installDebug
 ```
 
-### Key height from preferences
-The `TermKeyIMEService` reads the `key_height` preference on `onCreateInputView()`.
-Override `applyPreferences()` to dynamically set `layout_height` on each key row.
+If Gradle fails with `Unsupported class file major version 69`, switch back to JDK 17 before building.
 
-### Adding a numpad layer
-Add a second layout `keyboard_numpad.xml` and swap it in `onCreateInputView()` based on a mode flag, similar to how `fnRow.visibility` is toggled.
+## Setup
 
----
+1. Install the debug build.
+2. Open the `TermKey` app.
+3. Enable the `TermKey` input method in Android keyboard settings.
+4. Switch the active keyboard to `TermKey`.
+5. Open `Settings` inside the app to configure macros or voice input.
 
-## 🤝 Compatible apps
+## Settings
 
-Tested and verified to work with:
-- **Termux** — full Ctrl/Alt/F-key support
-- **ConnectBot** — SSH sessions
-- **JuiceSSH** — SSH with custom key support
-- **Blink Shell** — mosh/SSH
-- Any app that accepts standard Android keyboard input
+Key settings currently exposed:
 
----
+- show/hide macro bar
+- show/hide F-key row
+- key height
+- vibrate on keypress
+- sound on keypress
+- sticky modifiers
+- swipe-up alternate symbols
+- long-press alternate symbols
+- show/hide voice key
+- microphone permission request
+- Volcengine voice configuration
+- macro editing and reset
 
-## 📄 License
+## Project Structure
 
-MIT License — free to use, modify, and distribute.
+```text
+app/src/main/java/com/termkey/ime/
+├── TermKeyIMEService.kt
+├── NaturalShuangpinEngine.kt
+├── ChineseLexiconStore.kt
+├── VolcengineVoiceInputClient.kt
+├── MacroManager.kt
+├── MacroEditorActivity.kt
+├── SettingsActivity.kt
+└── SetupActivity.kt
+```
+
+Important resources:
+
+- `app/src/main/res/layout/keyboard_view.xml`: keyboard layout
+- `app/src/main/res/xml/preferences.xml`: settings screen
+- `app/src/main/assets/chinese_lexicon.db`: offline Chinese lexicon
+
+## Notes
+
+- The Chinese lexicon is bundled locally, so APK size is larger than a plain keyboard app.
+- User word frequency is stored on-device.
+- Voice input depends on external Volcengine credentials; the rest of the keyboard works offline.
+
+## Compatible Apps
+
+Best suited for terminal and SSH apps such as:
+
+- Termux
+- ConnectBot
+- JuiceSSH
+- Blink Shell
+
+It also works in ordinary Android text fields, especially for compact Chinese and voice input.
+
+## License
+
+MIT
