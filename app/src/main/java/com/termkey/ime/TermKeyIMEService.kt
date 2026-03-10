@@ -166,6 +166,7 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_arrow_up,
             R.id.key_shift,
             R.id.key_lang,
+            R.id.key_home,
             R.id.key_end,
             R.id.key_space,
             R.id.key_delete,
@@ -217,11 +218,119 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_arrow_up,
             R.id.key_shift,
             R.id.key_lang,
+            R.id.key_home,
             R.id.key_end,
             R.id.key_space,
             R.id.key_delete,
             R.id.key_mic,
             R.id.key_arrow_right,
+        )
+
+        private val COMPACT_SYMBOL_KEY_IDS = setOf(
+            R.id.key_grave,
+            R.id.key_1,
+            R.id.key_2,
+            R.id.key_3,
+            R.id.key_4,
+            R.id.key_5,
+            R.id.key_6,
+            R.id.key_7,
+            R.id.key_8,
+            R.id.key_9,
+            R.id.key_0,
+            R.id.key_minus,
+            R.id.key_equals,
+            R.id.key_backspace,
+            R.id.key_q,
+            R.id.key_w,
+            R.id.key_e,
+            R.id.key_r,
+            R.id.key_t,
+            R.id.key_y,
+            R.id.key_u,
+            R.id.key_i,
+            R.id.key_o,
+            R.id.key_p,
+            R.id.key_lbracket,
+            R.id.key_rbracket,
+            R.id.key_backslash,
+            R.id.key_a,
+            R.id.key_s,
+            R.id.key_d,
+            R.id.key_f_key,
+            R.id.key_g,
+            R.id.key_h,
+            R.id.key_j,
+            R.id.key_k,
+            R.id.key_l,
+            R.id.key_semicolon,
+            R.id.key_quote,
+            R.id.key_enter,
+            R.id.key_z,
+            R.id.key_x,
+            R.id.key_c,
+            R.id.key_v,
+            R.id.key_b,
+            R.id.key_n,
+            R.id.key_m,
+            R.id.key_comma,
+            R.id.key_period,
+            R.id.key_slash,
+            R.id.key_lang,
+            R.id.key_home,
+            R.id.key_space,
+            R.id.key_mic,
+            R.id.key_arrow_right,
+        )
+
+        private val SYMBOL_KEY_LABELS = mapOf(
+            R.id.key_grave to "~",
+            R.id.key_1 to "!",
+            R.id.key_2 to "@",
+            R.id.key_3 to "#",
+            R.id.key_4 to "￥",
+            R.id.key_5 to "%",
+            R.id.key_6 to "…",
+            R.id.key_7 to "&",
+            R.id.key_8 to "*",
+            R.id.key_9 to "(",
+            R.id.key_0 to ")",
+            R.id.key_minus to "_",
+            R.id.key_equals to "+",
+            R.id.key_q to "[",
+            R.id.key_w to "]",
+            R.id.key_e to "{",
+            R.id.key_r to "}",
+            R.id.key_t to "^",
+            R.id.key_y to "|",
+            R.id.key_u to "<",
+            R.id.key_i to ">",
+            R.id.key_o to "《",
+            R.id.key_p to "》",
+            R.id.key_lbracket to "「",
+            R.id.key_rbracket to "」",
+            R.id.key_backslash to "·",
+            R.id.key_a to ":",
+            R.id.key_s to ";",
+            R.id.key_d to "\"",
+            R.id.key_f_key to "'",
+            R.id.key_g to "/",
+            R.id.key_h to "\\",
+            R.id.key_j to "=",
+            R.id.key_k to "±",
+            R.id.key_l to "×",
+            R.id.key_semicolon to "÷",
+            R.id.key_quote to "~",
+            R.id.key_z to "，",
+            R.id.key_x to "。",
+            R.id.key_c to "？",
+            R.id.key_v to "！",
+            R.id.key_b to "：",
+            R.id.key_n to "；",
+            R.id.key_m to "、",
+            R.id.key_comma to "《",
+            R.id.key_period to "》",
+            R.id.key_slash to "·",
         )
     }
 
@@ -229,6 +338,7 @@ class TermKeyIMEService : InputMethodService() {
         FULL,
         COMPACT_ZH,
         COMPACT_EN,
+        COMPACT_SYMBOL,
     }
 
     // ── Modifier state ───────────────────────────────────────────────────────
@@ -254,6 +364,7 @@ class TermKeyIMEService : InputMethodService() {
     private val chineseEngine by lazy { NaturalShuangpinEngine(ChineseLexiconStore(applicationContext)) }
     private var chineseMode = false
     private var layoutMode = KeyboardLayoutMode.COMPACT_EN
+    private var previousCompactLayoutMode = KeyboardLayoutMode.COMPACT_EN
     private var voiceClient: VolcengineVoiceInputClient? = null
     private var voiceListening = false
     private var voiceStarting = false
@@ -368,8 +479,7 @@ class TermKeyIMEService : InputMethodService() {
         }
     }
 
-    private fun initializeKeyLabels() {
-        val labels = mapOf(
+    private fun baseCharacterKeyLabels() = mapOf(
             R.id.key_grave to "`",
             R.id.key_1 to "1",
             R.id.key_2 to "2",
@@ -417,6 +527,10 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_comma to ",",
             R.id.key_period to ".",
             R.id.key_slash to "/",
+        )
+
+    private fun initializeKeyLabels() {
+        val labels = baseCharacterKeyLabels() + mapOf(
             R.id.key_f1 to "F1",
             R.id.key_f2 to "F2",
             R.id.key_f3 to "F3",
@@ -510,7 +624,11 @@ class TermKeyIMEService : InputMethodService() {
         }
         wireKey(R.id.key_page_up)     { sendKeyCode(KeyEvent.KEYCODE_PAGE_UP) }
         wireKey(R.id.key_page_down)   { sendKeyCode(KeyEvent.KEYCODE_PAGE_DOWN) }
-        wireKey(R.id.key_home)        { sendKeyCode(KeyEvent.KEYCODE_MOVE_HOME) }
+        wireKey(R.id.key_home)        {
+            if (!handleSymbolModeToggleKey()) {
+                sendKeyCode(KeyEvent.KEYCODE_MOVE_HOME)
+            }
+        }
         wireKey(R.id.key_end)         {
             if (!handleCompactPunctuationKey(R.id.key_end)) {
                 sendKeyCode(KeyEvent.KEYCODE_MOVE_END)
@@ -592,6 +710,11 @@ class TermKeyIMEService : InputMethodService() {
             // Long-press for alternate symbol (if enabled)
             if (prefs.getBoolean("long_press_extra", true)) {
                 view.setOnLongClickListener {
+                    if (handleSymbolModeCharacterKey(viewId)) {
+                        feedbackVibrate(20)
+                        feedbackSound()
+                        return@setOnLongClickListener true
+                    }
                     if (handleCompactPunctuationKey(viewId)) {
                         feedbackVibrate(20)
                         feedbackSound()
@@ -606,6 +729,9 @@ class TermKeyIMEService : InputMethodService() {
             if (prefs.getBoolean("swipe_for_symbols", true)) {
                 var startY = 0f
                 view.setOnTouchListener { v, event ->
+                    if (layoutMode == KeyboardLayoutMode.COMPACT_SYMBOL) {
+                        return@setOnTouchListener false
+                    }
                     when (event.action) {
                         MotionEvent.ACTION_DOWN -> { startY = event.y; false }
                         MotionEvent.ACTION_UP -> {
@@ -628,6 +754,15 @@ class TermKeyIMEService : InputMethodService() {
                 }
             }
             view.setOnClickListener {
+                if (handleSymbolModeCharacterKey(viewId)) {
+                    feedbackVibrate(16)
+                    feedbackSound()
+                    if (shiftActive) {
+                        shiftActive = false
+                        updateModifierUI()
+                    }
+                    return@setOnClickListener
+                }
                 if (handleCompactPunctuationKey(viewId)) {
                     feedbackVibrate(16)
                     feedbackSound()
@@ -1037,7 +1172,7 @@ class TermKeyIMEService : InputMethodService() {
     }
 
     private fun compactPunctuationOutput(viewId: Int): String? {
-        if (layoutMode == KeyboardLayoutMode.FULL) return null
+        if (layoutMode != KeyboardLayoutMode.COMPACT_ZH && layoutMode != KeyboardLayoutMode.COMPACT_EN) return null
         return when (viewId) {
             R.id.key_esc -> if (chineseMode) "！" else "!"
             R.id.key_backspace -> if (chineseMode) "？" else "?"
@@ -1103,6 +1238,9 @@ class TermKeyIMEService : InputMethodService() {
     }
 
     private fun handleCharacterInput(primary: Char, alternate: Char, useAlternate: Boolean) {
+        if (layoutMode == KeyboardLayoutMode.COMPACT_SYMBOL) {
+            return
+        }
         val isLetter = primary in 'a'..'z'
         if (chineseMode && isLetter && !ctrlActive && !altActive) {
             updateChineseState(chineseEngine.append(primary))
@@ -1120,6 +1258,44 @@ class TermKeyIMEService : InputMethodService() {
         chineseMode = !chineseMode
         layoutMode = defaultLayoutModeForLanguage()
         clearChineseInput(commitCurrent = false)
+        updateKeyboardLayoutUi()
+    }
+
+    private fun handleSymbolModeToggleKey(): Boolean {
+        if (layoutMode == KeyboardLayoutMode.FULL) return false
+        toggleSymbolMode()
+        return true
+    }
+
+    private fun toggleSymbolMode() {
+        if (layoutMode == KeyboardLayoutMode.COMPACT_SYMBOL) {
+            layoutMode = previousCompactLayoutMode.takeIf {
+                it == KeyboardLayoutMode.COMPACT_ZH || it == KeyboardLayoutMode.COMPACT_EN
+            } ?: defaultLayoutModeForLanguage()
+            updateKeyboardLayoutUi()
+            return
+        }
+
+        if (chineseEngine.hasPending()) {
+            commitChineseSelection()
+        }
+        previousCompactLayoutMode = defaultLayoutModeForLanguage()
+        layoutMode = KeyboardLayoutMode.COMPACT_SYMBOL
+        updateKeyboardLayoutUi()
+    }
+
+    private fun handleSymbolModeCharacterKey(viewId: Int): Boolean {
+        if (layoutMode != KeyboardLayoutMode.COMPACT_SYMBOL) return false
+        val output = SYMBOL_KEY_LABELS[viewId] ?: return false
+        commitSymbolAndReturn(output)
+        return true
+    }
+
+    private fun commitSymbolAndReturn(symbol: String) {
+        currentInputConnection?.commitText(symbol, 1)
+        layoutMode = previousCompactLayoutMode.takeIf {
+            it == KeyboardLayoutMode.COMPACT_ZH || it == KeyboardLayoutMode.COMPACT_EN
+        } ?: defaultLayoutModeForLanguage()
         updateKeyboardLayoutUi()
     }
 
@@ -1222,6 +1398,7 @@ class TermKeyIMEService : InputMethodService() {
         val visibleCompactKeys = when (layoutMode) {
             KeyboardLayoutMode.COMPACT_ZH -> COMPACT_ZH_KEY_IDS
             KeyboardLayoutMode.COMPACT_EN -> COMPACT_EN_KEY_IDS
+            KeyboardLayoutMode.COMPACT_SYMBOL -> COMPACT_SYMBOL_KEY_IDS
             KeyboardLayoutMode.FULL -> emptySet()
         }
 
@@ -1241,7 +1418,8 @@ class TermKeyIMEService : InputMethodService() {
             }
 
             KeyboardLayoutMode.COMPACT_ZH,
-            KeyboardLayoutMode.COMPACT_EN -> {
+            KeyboardLayoutMode.COMPACT_EN,
+            KeyboardLayoutMode.COMPACT_SYMBOL -> {
                 ALL_KEY_IDS.forEach { keyId ->
                     rootView.findViewById<View>(keyId)?.visibility =
                         when {
@@ -1262,7 +1440,7 @@ class TermKeyIMEService : InputMethodService() {
             View.GONE
         }
 
-        if (chineseMode) {
+        if (chineseMode && layoutMode != KeyboardLayoutMode.COMPACT_SYMBOL) {
             candidateScrollView.visibility = View.VISIBLE
         } else {
             candidateScrollView.visibility = View.GONE
@@ -1375,10 +1553,16 @@ class TermKeyIMEService : InputMethodService() {
     private fun applyDynamicKeyLabels() {
         val compactLabels = if (layoutMode == KeyboardLayoutMode.FULL) {
             emptyMap()
+        } else if (layoutMode == KeyboardLayoutMode.COMPACT_SYMBOL) {
+            SYMBOL_KEY_LABELS + mapOf(
+                R.id.key_home to "ABC",
+                R.id.key_arrow_right to "↩",
+            )
         } else if (chineseMode) {
             mapOf(
                 R.id.key_esc to "！",
                 R.id.key_backspace to "？",
+                R.id.key_home to "#+=",
                 R.id.key_end to "，",
                 R.id.key_delete to "。",
                 R.id.key_arrow_up to "⌫",
@@ -1388,6 +1572,7 @@ class TermKeyIMEService : InputMethodService() {
             mapOf(
                 R.id.key_esc to "!",
                 R.id.key_backspace to "?",
+                R.id.key_home to "#+=",
                 R.id.key_end to ",",
                 R.id.key_delete to ".",
                 R.id.key_arrow_up to "⌫",
@@ -1395,7 +1580,7 @@ class TermKeyIMEService : InputMethodService() {
             )
         }
 
-        val defaultLabels = mapOf(
+        val defaultLabels = baseCharacterKeyLabels() + mapOf(
             R.id.key_tab to "TAB⇥",
             R.id.key_backslash to "\\",
             R.id.key_ctrl to "CTRL",
@@ -1405,6 +1590,7 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_backspace to "⌫",
             R.id.key_comma to ",",
             R.id.key_period to ".",
+            R.id.key_home to "Home",
             R.id.key_end to "End",
             R.id.key_slash to "/",
             R.id.key_arrow_up to "↑",
@@ -1413,7 +1599,9 @@ class TermKeyIMEService : InputMethodService() {
         )
 
         defaultLabels.forEach { (viewId, defaultLabel) ->
-            val label = compactLabels[viewId] ?: defaultLabel
+            rootView.findViewById<TextView>(viewId)?.text = defaultLabel
+        }
+        compactLabels.forEach { (viewId, label) ->
             rootView.findViewById<TextView>(viewId)?.text = label
         }
     }
@@ -1435,7 +1623,8 @@ class TermKeyIMEService : InputMethodService() {
         val effectiveHeightDp = when (layoutMode) {
             KeyboardLayoutMode.FULL -> baseHeightDp
             KeyboardLayoutMode.COMPACT_ZH,
-            KeyboardLayoutMode.COMPACT_EN -> nextCompactHeightDp(baseHeightDp)
+            KeyboardLayoutMode.COMPACT_EN,
+            KeyboardLayoutMode.COMPACT_SYMBOL -> nextCompactHeightDp(baseHeightDp)
         }
         val rowHeightPx = (effectiveHeightDp * resources.displayMetrics.density).toInt()
         keyRows.forEach { row ->
