@@ -28,6 +28,7 @@
 
     <!-- Thin separator -->
     <View
+        android:id="@+id/macro_separator"
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:background="@color/terminal_border" />
@@ -38,6 +39,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:visibility="gone"
+        android:minHeight="@dimen/macro_bar_height"
         android:scrollbars="none"
         android:background="@color/terminal_surface2"
         android:paddingTop="4dp"
@@ -80,6 +82,7 @@
 
     <!-- Row 1: ` 1 2 3 4 5 6 7 8 9 0 - = ⌫ -->
     <LinearLayout
+        android:id="@+id/key_row_1"
         android:layout_width="match_parent"
         android:layout_height="@dimen/key_height_default"
         android:orientation="horizontal"
@@ -106,6 +109,7 @@
 
     <!-- Row 2: Tab Q W E R T Y U I O P [ ] \ -->
     <LinearLayout
+        android:id="@+id/key_row_2"
         android:layout_width="match_parent"
         android:layout_height="@dimen/key_height_default"
         android:orientation="horizontal"
@@ -132,6 +136,7 @@
 
     <!-- Row 3: Ctrl A S D F G H J K L ; ' Enter -->
     <LinearLayout
+        android:id="@+id/key_row_3"
         android:layout_width="match_parent"
         android:layout_height="@dimen/key_height_default"
         android:orientation="horizontal"
@@ -157,6 +162,7 @@
 
     <!-- Row 4: ESC Alt Z X C V B N M , . / ↑ -->
     <LinearLayout
+        android:id="@+id/key_row_4"
         android:layout_width="match_parent"
         android:layout_height="@dimen/key_height_default"
         android:orientation="horizontal"
@@ -182,6 +188,7 @@
 
     <!-- Row 5: Shift 中/英 PgUp PgDn Home End SPACE Del MIC ← ↓ → -->
     <LinearLayout
+        android:id="@+id/key_row_5"
         android:layout_width="match_parent"
         android:layout_height="36dp"
         android:orientation="horizontal"
@@ -198,7 +205,7 @@
         <TextView android:id="@+id/key_end"        style="@style/Key.Fn"    android:text="End"    android:layout_weight="1.1" />
         <TextView android:id="@+id/key_space"      style="@style/Key.Space" android:text="SPACE"  android:layout_weight="4.2" />
         <TextView android:id="@+id/key_delete"     style="@style/Key.Fn"    android:text="Del"    android:layout_weight="1.1" />
-        <TextView android:id="@+id/key_mic"        style="@style/Key.Fn"    android:text="MIC"    android:layout_weight="1.1" />
+        <TextView android:id="@+id/key_mic"        style="@style/Key.Mic"   android:text="MIC"    android:layout_weight="1.1" />
         <TextView android:id="@+id/key_arrow_left" style="@style/Key.Arrow" android:text="←"      android:layout_weight="1" />
         <TextView android:id="@+id/key_arrow_down" style="@style/Key.Arrow" android:text="↓"      android:layout_weight="1" />
         <TextView android:id="@+id/key_arrow_right" style="@style/Key.Arrow" android:text="→"      android:layout_weight="1" />

@@ -79,4 +79,10 @@
         <item name="android:textSize">10sp</item>
         <item name="android:fontFamily">sans-serif-condensed</item>
     </style>
+
+    <style name="Key.Mic" parent="Key.Fn">
+        <item name="android:background">@drawable/bg_key_mic</item>
+        <item name="android:textColor">@color/terminal_green</item>
+        <item name="android:textStyle">bold</item>
+    </style>
 </resources>
