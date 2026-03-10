@@ -13,6 +13,9 @@ import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.animation.Animation
+import android.view.animation.AlphaAnimation
+import android.view.animation.LinearInterpolator
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.widget.HorizontalScrollView
@@ -54,6 +57,10 @@ class TermKeyIMEService : InputMethodService() {
     private var voiceClient: VolcengineVoiceInputClient? = null
     private var voiceListening = false
     private var voiceStarting = false
+    private var voiceStopping = false
+    private var voicePreviewText = ""
+    private var voicePreviewUsesComposing = false
+    private var voiceBlinkAnimation: AlphaAnimation? = null
 
     // ── Vibrator ─────────────────────────────────────────────────────────────
     private val vibrator: Vibrator? by lazy {
@@ -103,11 +110,11 @@ class TermKeyIMEService : InputMethodService() {
 
     override fun onFinishInputView(finishingInput: Boolean) {
         super.onFinishInputView(finishingInput)
-        stopVoiceInput()
+        cancelVoiceInput()
     }
 
     override fun onDestroy() {
-        stopVoiceInput()
+        cancelVoiceInput()
         super.onDestroy()
     }
 
@@ -528,10 +535,10 @@ class TermKeyIMEService : InputMethodService() {
     }
 
     private fun toggleVoiceInput() {
-        Log.d(TAG, "MIC tapped voiceStarting=$voiceStarting voiceListening=$voiceListening")
-        if (voiceStarting || voiceListening) {
+        Log.d(TAG, "MIC tapped voiceStarting=$voiceStarting voiceListening=$voiceListening voiceStopping=$voiceStopping")
+        if (voiceStarting || voiceListening || voiceStopping) {
             showToast(R.string.voice_stopping)
-            voiceClient?.stop()
+            requestVoiceStop()
             return
         }
 
@@ -556,6 +563,7 @@ class TermKeyIMEService : InputMethodService() {
                     voiceStarting = false
                     voiceListening = isListening
                     if (!isListening) {
+                        voiceStopping = false
                         voiceClient = null
                     }
                     updateVoiceKeyUI()
@@ -565,40 +573,51 @@ class TermKeyIMEService : InputMethodService() {
                 }
 
                 override fun onPartialResult(text: String) {
-                    // Streaming callbacks are optional for now; final text is committed below.
+                    renderVoicePreview(text)
                 }
 
                 override fun onFinalResult(text: String) {
                     Log.d(TAG, "Voice final result length=${text.length}")
                     voiceStarting = false
+                    voiceStopping = false
                     voiceListening = false
                     voiceClient = null
+                    commitVoicePreview(text)
                     updateVoiceKeyUI()
-                    if (text.isNotBlank()) {
-                        currentInputConnection?.commitText(text, 1)
-                    }
                 }
 
                 override fun onError(message: String) {
                     Log.e(TAG, "Voice error callback: $message")
                     voiceStarting = false
+                    voiceStopping = false
                     voiceListening = false
                     voiceClient = null
+                    finishVoicePreview()
                     updateVoiceKeyUI()
                     showToast("${getString(R.string.voice_error_prefix)} $message", Toast.LENGTH_LONG)
                 }
             },
         )
         voiceStarting = true
+        voiceStopping = false
         updateVoiceKeyUI()
         voiceClient?.start()
     }
 
-    private fun stopVoiceInput() {
+    private fun requestVoiceStop() {
+        voiceStarting = false
+        voiceStopping = true
+        updateVoiceKeyUI()
         voiceClient?.stop()
+    }
+
+    private fun cancelVoiceInput() {
+        voiceClient?.cancel()
         voiceClient = null
         voiceStarting = false
+        voiceStopping = false
         voiceListening = false
+        finishVoicePreview()
         updateVoiceKeyUI()
     }
 
@@ -626,16 +645,107 @@ class TermKeyIMEService : InputMethodService() {
 
     private fun updateVoiceKeyUI() {
         if (!::voiceKey.isInitialized) return
-        val active = voiceStarting || voiceListening
+        val active = voiceStarting || voiceListening || voiceStopping
         voiceKey.isActivated = active
         voiceKey.alpha = if (active) 1.0f else 0.85f
         voiceKey.text = getString(
             when {
+                voiceStopping -> R.string.key_mic_connecting
                 voiceListening -> R.string.key_mic_recording
                 voiceStarting -> R.string.key_mic_connecting
                 else -> R.string.key_mic_idle
             },
         )
+        syncVoiceBlinking()
+    }
+
+    private fun syncVoiceBlinking() {
+        if (!::voiceKey.isInitialized) return
+        if (voiceListening && !voiceStopping) {
+            if (voiceBlinkAnimation == null) {
+                voiceBlinkAnimation = AlphaAnimation(1.0f, 0.35f).apply {
+                    duration = 700
+                    repeatMode = Animation.REVERSE
+                    repeatCount = Animation.INFINITE
+                    interpolator = LinearInterpolator()
+                }
+            }
+            if (voiceKey.animation == null) {
+                voiceKey.startAnimation(voiceBlinkAnimation)
+            }
+        } else {
+            voiceKey.clearAnimation()
+        }
+    }
+
+    private fun renderVoicePreview(text: String) {
+        val preview = text.trim()
+        if (preview.isEmpty() || preview == voicePreviewText) return
+
+        val ic = currentInputConnection ?: return
+        ic.beginBatchEdit()
+        try {
+            if (!voicePreviewUsesComposing && voicePreviewText.isNotEmpty()) {
+                ic.deleteSurroundingText(voicePreviewText.length, 0)
+            }
+
+            val composingApplied = runCatching { ic.setComposingText(preview, 1) }.getOrDefault(false)
+            if (composingApplied) {
+                voicePreviewUsesComposing = true
+                voicePreviewText = preview
+            } else {
+                ic.commitText(preview, 1)
+                voicePreviewUsesComposing = false
+                voicePreviewText = preview
+            }
+        } finally {
+            ic.endBatchEdit()
+        }
+    }
+
+    private fun commitVoicePreview(finalText: String) {
+        val resolvedText = finalText.trim()
+        val ic = currentInputConnection
+        if (ic == null) {
+            resetVoicePreviewState()
+            return
+        }
+
+        ic.beginBatchEdit()
+        try {
+            when {
+                voicePreviewUsesComposing && resolvedText.isNotEmpty() -> ic.commitText(resolvedText, 1)
+                voicePreviewUsesComposing && voicePreviewText.isNotEmpty() -> ic.finishComposingText()
+                !voicePreviewUsesComposing && voicePreviewText.isNotEmpty() -> {
+                    if (resolvedText.isNotEmpty() && resolvedText != voicePreviewText) {
+                        ic.deleteSurroundingText(voicePreviewText.length, 0)
+                        ic.commitText(resolvedText, 1)
+                    }
+                }
+                resolvedText.isNotEmpty() -> ic.commitText(resolvedText, 1)
+            }
+        } finally {
+            ic.endBatchEdit()
+            resetVoicePreviewState()
+        }
+    }
+
+    private fun finishVoicePreview() {
+        val ic = currentInputConnection
+        if (ic != null && voicePreviewUsesComposing && voicePreviewText.isNotEmpty()) {
+            ic.beginBatchEdit()
+            try {
+                ic.finishComposingText()
+            } finally {
+                ic.endBatchEdit()
+            }
+        }
+        resetVoicePreviewState()
+    }
+
+    private fun resetVoicePreviewState() {
+        voicePreviewText = ""
+        voicePreviewUsesComposing = false
     }
 
     // ── Haptic / Audio feedback ────────────────────────────────────────────────

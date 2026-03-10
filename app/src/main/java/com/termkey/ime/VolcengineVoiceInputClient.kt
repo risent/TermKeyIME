@@ -34,7 +34,7 @@ class VolcengineVoiceInputClient(
         val accessToken: String,
         val resourceId: String,
         val language: String,
-        val endpoint: String = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_nostream",
+        val endpoint: String = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async",
         val sampleRate: Int = 16000,
     )
 
@@ -136,6 +136,12 @@ class VolcengineVoiceInputClient(
         isStopping = true
     }
 
+    fun cancel() {
+        if (isClosed) return
+        Log.d(TAG, "Cancelling voice client")
+        closeInternal(notifyFinal = false)
+    }
+
     private fun startAudioStreaming(socket: WebSocket) {
         val chunkBytes = (config.sampleRate / 10) * 2
         val minBuffer = AudioRecord.getMinBufferSize(
@@ -178,7 +184,7 @@ class VolcengineVoiceInputClient(
                     val isLastPacket = isStopping
                     socket.send(ByteString.of(*buildAudioPacket(packet, isLastPacket)))
                     if (isLastPacket) {
-                        Log.d(TAG, "Sent final audio packet sequence=$audioSequence bytes=$bytesRead")
+                        Log.d(TAG, "Sent final audio packet sequence=${audioSequence - 1} bytes=$bytesRead")
                         break
                     }
                 }
