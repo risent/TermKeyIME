@@ -23,8 +23,7 @@
             android:orientation="horizontal"
             android:paddingStart="6dp"
             android:paddingEnd="6dp"
-            android:gravity="center_vertical"
-            android:gap="4dp" />
+            android:gravity="center_vertical" />
     </HorizontalScrollView>
 
     <!-- Thin separator -->
@@ -179,7 +178,7 @@
         <TextView android:id="@+id/key_delete"     style="@style/Key.Fn"    android:text="Del"    android:layout_weight="1.1" />
         <TextView android:id="@+id/key_arrow_left" style="@style/Key.Arrow" android:text="←"      android:layout_weight="1" />
         <TextView android:id="@+id/key_arrow_down" style="@style/Key.Arrow" android:text="↓"      android:layout_weight="1" />
-        <TextView android:id="@+id/key_arrow_right"style="@style/Key.Arrow" android:text="→"      android:layout_weight="1" />
+        <TextView android:id="@+id/key_arrow_right" style="@style/Key.Arrow" android:text="→"      android:layout_weight="1" />
     </LinearLayout>
 
 </LinearLayout>

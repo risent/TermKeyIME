@@ -45,17 +45,27 @@ class TermKeyIMEService : InputMethodService() {
     private val prefs by lazy { PreferenceManager.getDefaultSharedPreferences(this) }
 
     // ── Vibrator ─────────────────────────────────────────────────────────────
-    private val vibrator by lazy {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+    private val vibrator: Vibrator? by lazy {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            }
+        } catch (_: Exception) {
+            null
         }
     }
 
     // ── AudioManager ─────────────────────────────────────────────────────────
-    private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+    private val audioManager: AudioManager? by lazy {
+        try {
+            getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        } catch (_: Exception) {
+            null
+        }
+    }
 
     // ── IME lifecycle ────────────────────────────────────────────────────────
 
@@ -419,16 +429,27 @@ class TermKeyIMEService : InputMethodService() {
 
     private fun feedbackVibrate(ms: Long = 10) {
         if (!prefs.getBoolean("vibrate_on_keypress", true)) return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
-        } else {
-            @Suppress("DEPRECATION")
-            vibrator.vibrate(ms)
+        val vib = vibrator ?: return
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vib.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vib.vibrate(ms)
+            }
+        } catch (_: SecurityException) {
+            // Ignore unavailable/blocked vibration instead of crashing the IME.
+        } catch (_: Exception) {
+            // Some devices expose inconsistent vibrator services.
         }
     }
 
     private fun feedbackSound() {
         if (!prefs.getBoolean("sound_on_keypress", false)) return
-        audioManager.playSoundEffect(AudioManager.FX_KEYPRESS_STANDARD, -1f)
+        try {
+            audioManager?.playSoundEffect(AudioManager.FX_KEYPRESS_STANDARD, -1f)
+        } catch (_: Exception) {
+            // Ignore sound-effect failures instead of crashing the IME.
+        }
     }
 }
