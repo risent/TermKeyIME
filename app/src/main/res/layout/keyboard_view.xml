@@ -159,7 +159,7 @@
         <TextView android:id="@+id/key_arrow_up"    style="@style/Key.Arrow" android:text="↑"     android:layout_weight="1" />
     </LinearLayout>
 
-    <!-- Row 5: PgUp PgDn Home End SPACE Del Ins ← ↓ → -->
+    <!-- Row 5: Shift PgUp PgDn Home End SPACE Del MIC ← ↓ → -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="36dp"
@@ -176,6 +176,7 @@
         <TextView android:id="@+id/key_end"        style="@style/Key.Fn"    android:text="End"    android:layout_weight="1.1" />
         <TextView android:id="@+id/key_space"      style="@style/Key.Space" android:text="SPACE"  android:layout_weight="5" />
         <TextView android:id="@+id/key_delete"     style="@style/Key.Fn"    android:text="Del"    android:layout_weight="1.1" />
+        <TextView android:id="@+id/key_mic"        style="@style/Key.Fn"    android:text="MIC"    android:layout_weight="1.1" />
         <TextView android:id="@+id/key_arrow_left" style="@style/Key.Arrow" android:text="←"      android:layout_weight="1" />
         <TextView android:id="@+id/key_arrow_down" style="@style/Key.Arrow" android:text="↓"      android:layout_weight="1" />
         <TextView android:id="@+id/key_arrow_right" style="@style/Key.Arrow" android:text="→"      android:layout_weight="1" />

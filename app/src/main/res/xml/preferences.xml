@@ -46,6 +46,36 @@
             android:defaultValue="true" />
     </PreferenceCategory>
 
+    <PreferenceCategory android:title="@string/pref_category_voice">
+        <SwitchPreferenceCompat
+            android:key="show_voice_key"
+            android:title="@string/pref_show_voice_key"
+            android:summary="@string/pref_show_voice_key_summary"
+            android:defaultValue="true" />
+        <Preference
+            android:key="voice_request_permission"
+            android:title="@string/pref_voice_permission"
+            android:summary="@string/pref_voice_permission_summary" />
+        <EditTextPreference
+            android:key="voice_volc_app_key"
+            android:title="@string/pref_voice_app_key"
+            android:summary="@string/pref_voice_app_key_summary" />
+        <EditTextPreference
+            android:key="voice_volc_access_key"
+            android:title="@string/pref_voice_access_key"
+            android:summary="@string/pref_voice_access_key_summary" />
+        <EditTextPreference
+            android:key="voice_volc_resource_id"
+            android:title="@string/pref_voice_resource_id"
+            android:summary="@string/pref_voice_resource_id_summary"
+            android:defaultValue="volc.seedasr.sauc.concurrent" />
+        <EditTextPreference
+            android:key="voice_language"
+            android:title="@string/pref_voice_language"
+            android:summary="@string/pref_voice_language_summary"
+            android:defaultValue="zh-CN" />
+    </PreferenceCategory>
+
     <PreferenceCategory android:title="@string/pref_category_macros">
         <Preference
             android:key="edit_macros"

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/terminal_bg"
+    android:padding="16dp">
+
+    <TextView
+        android:id="@+id/macro_editor_hint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/macro_editor_hint"
+        android:textColor="@color/terminal_text_dim"
+        android:textSize="13sp"
+        android:paddingBottom="12dp" />
+
+    <TextView
+        android:id="@+id/macro_empty"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/macro_editor_empty"
+        android:textColor="@color/terminal_text_dim"
+        android:textSize="14sp"
+        android:gravity="center"
+        android:paddingTop="24dp"
+        android:paddingBottom="24dp"
+        android:visibility="gone" />
+
+    <ListView
+        android:id="@+id/macro_list"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:divider="@color/terminal_border"
+        android:dividerHeight="1dp"
+        android:listSelector="@android:color/transparent"
+        android:cacheColorHint="@android:color/transparent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/button_add_macro"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="@string/macro_editor_add"
+        app:icon="@android:drawable/ic_input_add"
+        app:iconGravity="textStart" />
+
+</LinearLayout>

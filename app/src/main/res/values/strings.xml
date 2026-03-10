@@ -17,6 +17,7 @@
     <!-- Settings -->
     <string name="pref_category_appearance">Appearance</string>
     <string name="pref_category_behavior">Behavior</string>
+    <string name="pref_category_voice">Voice Input</string>
     <string name="pref_category_macros">Macro Bar</string>
     <string name="pref_show_fn_row">Show F1–F12 row</string>
     <string name="pref_show_fn_row_summary">Display function key row at top of keyboard</string>
@@ -31,9 +32,47 @@
     <string name="pref_swipe_summary">Swipe up on a key to type the symbol shown in its corner</string>
     <string name="pref_long_press">Long-press for alternate symbol</string>
     <string name="pref_long_press_summary">Long-press any key to type the alternate symbol</string>
+    <string name="pref_show_voice_key">Show voice key</string>
+    <string name="pref_show_voice_key_summary">Display a microphone key for streaming speech-to-text</string>
+    <string name="pref_voice_permission">Grant microphone permission</string>
+    <string name="pref_voice_permission_summary">Required before the IME can record voice input</string>
+    <string name="pref_voice_permission_granted_summary">Microphone permission granted.</string>
+    <string name="pref_voice_app_key">Volcengine APP ID</string>
+    <string name="pref_voice_app_key_summary">Value used in X-Api-App-Key. The doc labels this as APP ID.</string>
+    <string name="pref_voice_access_key">Volcengine Access Token</string>
+    <string name="pref_voice_access_key_summary">Value used in X-Api-Access-Key.</string>
+    <string name="pref_voice_resource_id">Volcengine Resource ID</string>
+    <string name="pref_voice_resource_id_summary">Resource identifier such as volc.seedasr.sauc.concurrent</string>
+    <string name="pref_voice_language">Language</string>
+    <string name="pref_voice_language_summary">Recognition language, for example zh-CN or en-US</string>
     <string name="pref_edit_macros">Edit macros</string>
     <string name="pref_edit_macros_summary">Customize the quick-insert macro bar</string>
     <string name="pref_reset_macros">Reset macros to defaults</string>
+    <string name="macro_editor_title">Edit Macros</string>
+    <string name="macro_editor_hint">Tap Edit to update a macro label or inserted text. New macros appear in the bar immediately the next time the keyboard view is created.</string>
+    <string name="macro_editor_empty">No macros configured yet.</string>
+    <string name="macro_editor_add">Add Macro</string>
+    <string name="macro_editor_edit">Edit</string>
+    <string name="macro_editor_add_title">Add Macro</string>
+    <string name="macro_editor_edit_title">Edit Macro</string>
+    <string name="macro_editor_save">Save</string>
+    <string name="macro_editor_delete">Delete</string>
+    <string name="macro_editor_label_hint">Button label</string>
+    <string name="macro_editor_text_hint">Inserted text</string>
+    <string name="macro_editor_error_label">Enter a label.</string>
+    <string name="macro_editor_error_text">Enter text to insert.</string>
+    <string name="macro_editor_added">Macro added.</string>
+    <string name="macro_editor_updated">Macro updated.</string>
+    <string name="macro_editor_deleted">Macro deleted.</string>
+    <string name="voice_permission_granted">Microphone permission granted.</string>
+    <string name="voice_permission_denied">Microphone permission denied.</string>
+    <string name="voice_missing_permission">Microphone permission is missing. Open TermKey Settings and grant it first.</string>
+    <string name="voice_missing_config">Configure Volcengine voice settings first.</string>
+    <string name="voice_listening">Voice input started.</string>
+    <string name="voice_stopping">Stopping voice input…</string>
+    <string name="voice_error_prefix">Voice input failed:</string>
+    <string name="pref_value_not_set">Not set</string>
+    <string name="pref_value_configured">Configured</string>
 
     <!-- Keyboard labels -->
     <string name="key_ctrl">CTRL</string>
@@ -44,4 +83,7 @@
     <string name="key_space">SPACE</string>
     <string name="key_backspace">⌫</string>
     <string name="key_shift">⇧</string>
+    <string name="key_mic_idle">MIC</string>
+    <string name="key_mic_connecting">...</string>
+    <string name="key_mic_recording">REC</string>
 </resources>

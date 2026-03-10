@@ -1,12 +1,15 @@
 package com.termkey.ime
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.inputmethodservice.InputMethodService
 import android.media.AudioManager
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
@@ -15,6 +18,7 @@ import android.view.inputmethod.InputConnection
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.preference.PreferenceManager
 
@@ -29,6 +33,9 @@ import androidx.preference.PreferenceManager
  *  - Ctrl combos generate the correct control characters (e.g. Ctrl+C → 0x03)
  */
 class TermKeyIMEService : InputMethodService() {
+    companion object {
+        private const val TAG = "TermKeyVoice"
+    }
 
     // ── Modifier state ───────────────────────────────────────────────────────
     private var ctrlActive = false
@@ -40,9 +47,13 @@ class TermKeyIMEService : InputMethodService() {
     private lateinit var macroScrollView: HorizontalScrollView
     private lateinit var macroContainer: LinearLayout
     private lateinit var fnRow: LinearLayout
+    private lateinit var voiceKey: TextView
 
     // ── Prefs ────────────────────────────────────────────────────────────────
     private val prefs by lazy { PreferenceManager.getDefaultSharedPreferences(this) }
+    private var voiceClient: VolcengineVoiceInputClient? = null
+    private var voiceListening = false
+    private var voiceStarting = false
 
     // ── Vibrator ─────────────────────────────────────────────────────────────
     private val vibrator: Vibrator? by lazy {
@@ -74,6 +85,7 @@ class TermKeyIMEService : InputMethodService() {
         macroScrollView = rootView.findViewById(R.id.macro_scroll)
         macroContainer = rootView.findViewById(R.id.macro_container)
         fnRow = rootView.findViewById(R.id.fn_row)
+        voiceKey = rootView.findViewById(R.id.key_mic)
 
         initializeKeyLabels()
         applyPreferences()
@@ -89,6 +101,16 @@ class TermKeyIMEService : InputMethodService() {
         resetModifiers()
     }
 
+    override fun onFinishInputView(finishingInput: Boolean) {
+        super.onFinishInputView(finishingInput)
+        stopVoiceInput()
+    }
+
+    override fun onDestroy() {
+        stopVoiceInput()
+        super.onDestroy()
+    }
+
     // ── Preferences ──────────────────────────────────────────────────────────
 
     private fun applyPreferences() {
@@ -97,6 +119,10 @@ class TermKeyIMEService : InputMethodService() {
 
         val showMacro = prefs.getBoolean("show_macro_bar", true)
         macroScrollView.visibility = if (showMacro) View.VISIBLE else View.GONE
+
+        val showVoice = prefs.getBoolean("show_voice_key", true)
+        voiceKey.visibility = if (showVoice) View.VISIBLE else View.GONE
+        updateVoiceKeyUI()
     }
 
     // ── Macro bar ─────────────────────────────────────────────────────────────
@@ -181,6 +207,7 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_f10 to "F10",
             R.id.key_f11 to "F11",
             R.id.key_f12 to "F12",
+            R.id.key_mic to getString(R.string.key_mic_idle),
         )
 
         labels.forEach { (viewId, label) ->
@@ -212,6 +239,11 @@ class TermKeyIMEService : InputMethodService() {
         wireKey(R.id.key_backspace) { sendBackspace() }
         wireKey(R.id.key_space)     { sendSpace() }
         wireKey(R.id.key_delete)    { sendKeyCode(KeyEvent.KEYCODE_FORWARD_DEL) }
+        rootView.findViewById<View>(R.id.key_mic)?.setOnClickListener {
+            feedbackVibrate()
+            feedbackSound()
+            toggleVoiceInput()
+        }
 
         // ── Navigation ──
         wireKey(R.id.key_arrow_up)    { sendKeyCode(KeyEvent.KEYCODE_DPAD_UP) }
@@ -468,6 +500,7 @@ class TermKeyIMEService : InputMethodService() {
         // Update Shift key visual label if needed
         val shiftView = rootView.findViewById<TextView>(R.id.key_shift)
         shiftView?.alpha = if (shiftActive) 1.0f else 0.7f
+        updateVoiceKeyUI()
     }
 
     private fun resetModifiers() {
@@ -492,6 +525,117 @@ class TermKeyIMEService : InputMethodService() {
             feedbackVibrate(15)
             action()
         }
+    }
+
+    private fun toggleVoiceInput() {
+        Log.d(TAG, "MIC tapped voiceStarting=$voiceStarting voiceListening=$voiceListening")
+        if (voiceStarting || voiceListening) {
+            showToast(R.string.voice_stopping)
+            voiceClient?.stop()
+            return
+        }
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            Log.w(TAG, "MIC tap blocked: RECORD_AUDIO permission missing")
+            showToast(R.string.voice_missing_permission)
+            return
+        }
+
+        val config = buildVoiceConfig()
+        if (config == null) {
+            Log.w(TAG, "MIC tap blocked: missing Volcengine config")
+            showToast(R.string.voice_missing_config)
+            return
+        }
+
+        voiceClient = VolcengineVoiceInputClient(
+            config = config,
+            listener = object : VolcengineVoiceInputClient.Listener {
+                override fun onListeningChanged(isListening: Boolean) {
+                    Log.d(TAG, "Voice state changed isListening=$isListening")
+                    voiceStarting = false
+                    voiceListening = isListening
+                    if (!isListening) {
+                        voiceClient = null
+                    }
+                    updateVoiceKeyUI()
+                    if (isListening) {
+                        showToast(R.string.voice_listening)
+                    }
+                }
+
+                override fun onPartialResult(text: String) {
+                    // Streaming callbacks are optional for now; final text is committed below.
+                }
+
+                override fun onFinalResult(text: String) {
+                    Log.d(TAG, "Voice final result length=${text.length}")
+                    voiceStarting = false
+                    voiceListening = false
+                    voiceClient = null
+                    updateVoiceKeyUI()
+                    if (text.isNotBlank()) {
+                        currentInputConnection?.commitText(text, 1)
+                    }
+                }
+
+                override fun onError(message: String) {
+                    Log.e(TAG, "Voice error callback: $message")
+                    voiceStarting = false
+                    voiceListening = false
+                    voiceClient = null
+                    updateVoiceKeyUI()
+                    showToast("${getString(R.string.voice_error_prefix)} $message", Toast.LENGTH_LONG)
+                }
+            },
+        )
+        voiceStarting = true
+        updateVoiceKeyUI()
+        voiceClient?.start()
+    }
+
+    private fun stopVoiceInput() {
+        voiceClient?.stop()
+        voiceClient = null
+        voiceStarting = false
+        voiceListening = false
+        updateVoiceKeyUI()
+    }
+
+    private fun buildVoiceConfig(): VolcengineVoiceInputClient.Config? {
+        val appKey = prefs.getString("voice_volc_app_key", null)?.trim().orEmpty()
+        val accessToken = prefs.getString("voice_volc_access_key", null)?.trim().orEmpty()
+        val resourceId = prefs.getString("voice_volc_resource_id", null)?.trim().orEmpty()
+        val language = prefs.getString("voice_language", "zh-CN")?.trim().orEmpty().ifBlank { "zh-CN" }
+
+        if (appKey.isBlank() || accessToken.isBlank() || resourceId.isBlank()) {
+            Log.w(
+                TAG,
+                "Incomplete voice config appKey=${appKey.isNotBlank()} accessToken=${accessToken.isNotBlank()} resourceId=${resourceId.isNotBlank()}",
+            )
+            return null
+        }
+
+        return VolcengineVoiceInputClient.Config(
+            appKey = appKey,
+            accessToken = accessToken,
+            resourceId = resourceId,
+            language = language,
+        )
+    }
+
+    private fun updateVoiceKeyUI() {
+        if (!::voiceKey.isInitialized) return
+        val active = voiceStarting || voiceListening
+        voiceKey.isActivated = active
+        voiceKey.alpha = if (active) 1.0f else 0.85f
+        voiceKey.text = getString(
+            when {
+                voiceListening -> R.string.key_mic_recording
+                voiceStarting -> R.string.key_mic_connecting
+                else -> R.string.key_mic_idle
+            },
+        )
     }
 
     // ── Haptic / Audio feedback ────────────────────────────────────────────────
@@ -520,5 +664,13 @@ class TermKeyIMEService : InputMethodService() {
         } catch (_: Exception) {
             // Ignore sound-effect failures instead of crashing the IME.
         }
+    }
+
+    private fun showToast(text: String, duration: Int = Toast.LENGTH_SHORT) {
+        Toast.makeText(this, text, duration).show()
+    }
+
+    private fun showToast(resId: Int, duration: Int = Toast.LENGTH_SHORT) {
+        Toast.makeText(this, resId, duration).show()
     }
 }
