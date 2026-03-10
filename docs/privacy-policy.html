@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TermKey IME Privacy Policy</title>
+  <style>
+    :root {
+      --bg: #0a0c0a;
+      --panel: #0f1410;
+      --panel-2: #141a14;
+      --line: #1e2e1e;
+      --text: #b9f6ca;
+      --muted: #7ccf95;
+      --accent: #00e676;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, var(--bg), #101610 60%, #0b100b);
+      color: var(--text);
+    }
+    main {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 48px 20px 80px;
+    }
+    header, section {
+      background: rgba(15, 20, 16, 0.92);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 24px 24px 20px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.22);
+      margin-bottom: 18px;
+    }
+    h1, h2 {
+      margin: 0 0 12px;
+      color: var(--accent);
+    }
+    p, li { margin: 0 0 10px; }
+    ul { margin: 0; padding-left: 20px; }
+    .muted { color: var(--muted); }
+    code {
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 1px 6px;
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>TermKey IME Privacy Policy</h1>
+      <p class="muted">Last updated: March 10, 2026</p>
+      <p>TermKey IME is an Android input method for terminal-style input, compact Chinese and English typing, local macro insertion, and optional voice input.</p>
+    </header>
+
+    <section>
+      <h2>Data We Process</h2>
+      <p>TermKey IME does not require an account and does not operate its own backend service.</p>
+      <ul>
+        <li>Text you type through the keyboard</li>
+        <li>Locally stored macro definitions</li>
+        <li>Locally stored Chinese input frequency data</li>
+        <li>Optional voice audio when you explicitly start voice input</li>
+        <li>Optional voice recognition text returned by the configured speech provider</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Voice Input</h2>
+      <p>Voice input is optional.</p>
+      <p>If you enable voice input and configure Volcengine speech recognition:</p>
+      <ul>
+        <li>Microphone audio is sent to the speech recognition provider you configured</li>
+        <li>Recognized text is returned to the app and inserted into the active text field</li>
+        <li>TermKey IME itself does not provide or operate the speech backend</li>
+      </ul>
+      <p>You are responsible for reviewing the privacy terms of the configured speech provider.</p>
+    </section>
+
+    <section>
+      <h2>Local Storage</h2>
+      <ul>
+        <li>Macro bar configuration</li>
+        <li>Chinese input user frequency data</li>
+        <li>App preferences, such as keyboard height and feature toggles</li>
+        <li>Optional voice input configuration values that you enter in settings</li>
+      </ul>
+      <p>This data stays on device unless you use Android backup or another external device-level sync mechanism.</p>
+    </section>
+
+    <section>
+      <h2>Data Sharing</h2>
+      <p>TermKey IME does not sell personal data.</p>
+      <p>The app does not share typed content with the developer's own servers.</p>
+      <p>If you use optional voice input, audio and recognition-related data are sent to the third-party provider you configured in the app.</p>
+    </section>
+
+    <section>
+      <h2>Permissions</h2>
+      <ul>
+        <li><code>RECORD_AUDIO</code> for optional voice input</li>
+        <li><code>INTERNET</code> for optional voice recognition requests</li>
+        <li><code>VIBRATE</code> for haptic feedback</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Security, Children, and Contact</h2>
+      <p>TermKey IME stores settings and local input data using normal Android app storage mechanisms. No security method can guarantee absolute protection.</p>
+      <p>TermKey IME is not specifically directed to children.</p>
+      <p>For privacy questions, use the public contact channel listed in the app store listing or repository.</p>
+    </section>
+  </main>
+</body>
+</html>

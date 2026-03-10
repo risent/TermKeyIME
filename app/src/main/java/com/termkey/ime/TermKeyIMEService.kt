@@ -914,7 +914,13 @@ class TermKeyIMEService : InputMethodService() {
         if (chineseMode && chineseEngine.hasPending()) {
             feedbackVibrate()
             feedbackSound()
-            commitChineseSelection()
+            val state = chineseEngine.currentState()
+            if (state.canCommitOnSpace) {
+                commitChineseSelection(state.primaryCandidate)
+            } else {
+                clearChineseInput(commitCurrent = false)
+                currentInputConnection?.commitText(" ", 1)
+            }
             return
         }
         feedbackVibrate()
@@ -1317,6 +1323,8 @@ class TermKeyIMEService : InputMethodService() {
         val ic = currentInputConnection
         if (state.rawCode.isEmpty()) {
             ic?.finishComposingText()
+        } else if (state.primaryCandidate != null) {
+            ic?.setComposingText(state.primaryCandidate, 1)
         } else if (state.previewText.isNotEmpty()) {
             ic?.setComposingText(state.previewText, 1)
         }
@@ -1355,7 +1363,7 @@ class TermKeyIMEService : InputMethodService() {
 
         val state = chineseEngine.currentState()
         val resolved = candidate
-            ?: state.candidates.firstOrNull()
+            ?: state.primaryCandidate
             ?: state.previewText.takeIf { it.isNotBlank() }
 
         currentInputConnection?.apply {

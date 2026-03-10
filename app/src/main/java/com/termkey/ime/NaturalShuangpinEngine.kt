@@ -1,11 +1,26 @@
 package com.termkey.ime
 
+enum class ChineseCandidateKind {
+    NONE,
+    SENTENCE,
+    PHRASE,
+    FALLBACK,
+}
+
+data class ChineseCandidateQueryResult(
+    val candidates: List<String>,
+    val primaryCandidateKind: ChineseCandidateKind,
+)
+
 data class ChineseInputState(
     val rawCode: String,
     val decodedPinyin: String,
     val previewText: String,
     val candidates: List<String>,
     val hasPendingTail: Boolean,
+    val primaryCandidate: String?,
+    val primaryCandidateKind: ChineseCandidateKind,
+    val canCommitOnSpace: Boolean,
 )
 
 class NaturalShuangpinEngine(
@@ -34,7 +49,7 @@ class NaturalShuangpinEngine(
     fun hasPending(): Boolean = rawCode.isNotEmpty()
 
     fun recordSelection(state: ChineseInputState, text: String) {
-        if (text.isBlank() || state.candidates.isEmpty() || state.hasPendingTail) return
+        if (text.isBlank() || state.hasPendingTail) return
         val pinyinKey = state.decodedPinyin.takeIf { it.isNotBlank() && !it.contains(' ') } ?: return
         lexiconStore?.recordSelection(pinyinKey, text)
     }
@@ -42,7 +57,7 @@ class NaturalShuangpinEngine(
     fun currentState(): ChineseInputState {
         val code = rawCode.toString()
         if (code.isEmpty()) {
-            return ChineseInputState("", "", "", emptyList(), false)
+            return ChineseInputState("", "", "", emptyList(), false, null, ChineseCandidateKind.NONE, false)
         }
 
         val fullPairCount = code.length / 2
@@ -68,6 +83,9 @@ class NaturalShuangpinEngine(
                 previewText = code,
                 candidates = emptyList(),
                 hasPendingTail = hasPendingTail,
+                primaryCandidate = null,
+                primaryCandidateKind = ChineseCandidateKind.FALLBACK,
+                canCommitOnSpace = false,
             )
         }
 
@@ -79,15 +97,19 @@ class NaturalShuangpinEngine(
             }
         }
 
-        val candidates = when {
+        val candidateResult = when {
             !hasPendingTail && syllables.isNotEmpty() -> lookupCandidates(syllables)
-            hasPendingTail && syllables.isEmpty() -> lookupInitialCandidates(pendingTail.first())
+            hasPendingTail && syllables.isEmpty() -> ChineseCandidateQueryResult(
+                lookupInitialCandidates(pendingTail.first()),
+                ChineseCandidateKind.FALLBACK,
+            )
             hasPendingTail && syllables.isNotEmpty() -> lookupPartialCandidates(syllables, pendingTail.first())
-            else -> emptyList()
+            else -> ChineseCandidateQueryResult(emptyList(), ChineseCandidateKind.NONE)
         }
+        val primaryCandidate = candidateResult.candidates.firstOrNull()
 
         val preview = when {
-            candidates.isNotEmpty() -> candidates.first()
+            primaryCandidate != null -> primaryCandidate
             decodedPinyin.isNotEmpty() -> decodedPinyin
             else -> code
         }
@@ -96,8 +118,11 @@ class NaturalShuangpinEngine(
             rawCode = code,
             decodedPinyin = decodedPinyin,
             previewText = preview,
-            candidates = candidates,
+            candidates = candidateResult.candidates,
             hasPendingTail = hasPendingTail,
+            primaryCandidate = primaryCandidate,
+            primaryCandidateKind = candidateResult.primaryCandidateKind,
+            canCommitOnSpace = primaryCandidate != null && !hasPendingTail,
         )
     }
 
@@ -176,10 +201,12 @@ class NaturalShuangpinEngine(
         }
     }
 
-    private fun lookupCandidates(syllables: List<String>): List<String> {
-        if (syllables.isEmpty()) return emptyList()
+    private fun lookupCandidates(syllables: List<String>): ChineseCandidateQueryResult {
+        if (syllables.isEmpty()) {
+            return ChineseCandidateQueryResult(emptyList(), ChineseCandidateKind.NONE)
+        }
 
-        lexiconStore?.lookupCandidates(syllables)?.takeIf { it.isNotEmpty() }?.let {
+        lexiconStore?.lookupCandidates(syllables)?.takeIf { it.candidates.isNotEmpty() }?.let {
             return it
         }
 
@@ -189,11 +216,18 @@ class NaturalShuangpinEngine(
             else -> generatePhraseCandidates(syllables)
         }
 
-        return (explicit + generated)
+        val fallbackCandidates = (explicit + generated)
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .distinct()
             .take(9)
+        val kind = when {
+            fallbackCandidates.isEmpty() -> ChineseCandidateKind.NONE
+            syllables.size >= 3 -> ChineseCandidateKind.SENTENCE
+            syllables.size >= 2 -> ChineseCandidateKind.PHRASE
+            else -> ChineseCandidateKind.FALLBACK
+        }
+        return ChineseCandidateQueryResult(fallbackCandidates, kind)
     }
 
     private fun lookupInitialCandidates(rawInitial: Char): List<String> {
@@ -201,14 +235,27 @@ class NaturalShuangpinEngine(
         return lexiconStore?.lookupInitialCandidates(prefix).orEmpty()
     }
 
-    private fun lookupPartialCandidates(syllables: List<String>, rawInitial: Char): List<String> {
-        val initialPrefix = initialCandidatePrefix(rawInitial) ?: return emptyList()
+    private fun lookupPartialCandidates(syllables: List<String>, rawInitial: Char): ChineseCandidateQueryResult {
+        val initialPrefix = initialCandidatePrefix(rawInitial)
+            ?: return ChineseCandidateQueryResult(emptyList(), ChineseCandidateKind.NONE)
         val prefix = buildString {
             append(syllables.joinToString("'"))
             append("'")
             append(initialPrefix)
         }
-        return lexiconStore?.lookupPrefixedCandidates(prefix).orEmpty()
+        val prefixed = lexiconStore?.lookupPrefixedCandidates(prefix).orEmpty()
+        val completed = lookupCandidates(syllables).candidates
+        val merged = (prefixed + completed)
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .take(18)
+        val kind = when {
+            merged.isEmpty() -> ChineseCandidateKind.NONE
+            syllables.size >= 2 -> ChineseCandidateKind.SENTENCE
+            else -> ChineseCandidateKind.FALLBACK
+        }
+        return ChineseCandidateQueryResult(merged, kind)
     }
 
     private fun initialCandidatePrefix(rawInitial: Char): String? {
