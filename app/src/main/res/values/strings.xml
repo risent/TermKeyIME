@@ -83,6 +83,8 @@
     <string name="key_space">SPACE</string>
     <string name="key_backspace">⌫</string>
     <string name="key_shift">⇧</string>
+    <string name="key_lang_en">EN</string>
+    <string name="key_lang_zh">中</string>
     <string name="key_mic_idle">MIC</string>
     <string name="key_mic_connecting">...</string>
     <string name="key_mic_recording">REC</string>

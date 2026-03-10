@@ -32,6 +32,27 @@
         android:layout_height="1dp"
         android:background="@color/terminal_border" />
 
+    <!-- Chinese candidate bar -->
+    <HorizontalScrollView
+        android:id="@+id/candidate_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:scrollbars="none"
+        android:background="@color/terminal_surface2"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp">
+
+        <LinearLayout
+            android:id="@+id/candidate_container"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:gravity="center_vertical" />
+    </HorizontalScrollView>
+
     <!-- F1-F12 row -->
     <LinearLayout
         android:id="@+id/fn_row"
@@ -159,7 +180,7 @@
         <TextView android:id="@+id/key_arrow_up"    style="@style/Key.Arrow" android:text="↑"     android:layout_weight="1" />
     </LinearLayout>
 
-    <!-- Row 5: Shift PgUp PgDn Home End SPACE Del MIC ← ↓ → -->
+    <!-- Row 5: Shift 中/英 PgUp PgDn Home End SPACE Del MIC ← ↓ → -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="36dp"
@@ -170,11 +191,12 @@
         android:gravity="center_vertical">
 
         <TextView android:id="@+id/key_shift"      style="@style/Key.Fn"    android:text="⇧"      android:layout_weight="1.1" />
+        <TextView android:id="@+id/key_lang"       style="@style/Key.Mode"  android:text="EN"     android:layout_weight="1.1" />
         <TextView android:id="@+id/key_page_up"    style="@style/Key.Fn"    android:text="PgUp"   android:layout_weight="1.1" />
         <TextView android:id="@+id/key_page_down"  style="@style/Key.Fn"    android:text="PgDn"   android:layout_weight="1.1" />
         <TextView android:id="@+id/key_home"       style="@style/Key.Fn"    android:text="Home"   android:layout_weight="1.1" />
         <TextView android:id="@+id/key_end"        style="@style/Key.Fn"    android:text="End"    android:layout_weight="1.1" />
-        <TextView android:id="@+id/key_space"      style="@style/Key.Space" android:text="SPACE"  android:layout_weight="5" />
+        <TextView android:id="@+id/key_space"      style="@style/Key.Space" android:text="SPACE"  android:layout_weight="4.2" />
         <TextView android:id="@+id/key_delete"     style="@style/Key.Fn"    android:text="Del"    android:layout_weight="1.1" />
         <TextView android:id="@+id/key_mic"        style="@style/Key.Fn"    android:text="MIC"    android:layout_weight="1.1" />
         <TextView android:id="@+id/key_arrow_left" style="@style/Key.Arrow" android:text="←"      android:layout_weight="1" />

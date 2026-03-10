@@ -73,4 +73,10 @@
         <item name="android:textSize">10sp</item>
         <item name="android:fontFamily">sans-serif-condensed</item>
     </style>
+
+    <style name="Key.Mode" parent="Key.Ctrl">
+        <item name="android:textColor">@color/terminal_green</item>
+        <item name="android:textSize">10sp</item>
+        <item name="android:fontFamily">sans-serif-condensed</item>
+    </style>
 </resources>

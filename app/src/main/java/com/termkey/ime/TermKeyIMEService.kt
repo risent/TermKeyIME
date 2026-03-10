@@ -49,11 +49,16 @@ class TermKeyIMEService : InputMethodService() {
     private lateinit var rootView: View
     private lateinit var macroScrollView: HorizontalScrollView
     private lateinit var macroContainer: LinearLayout
+    private lateinit var candidateScrollView: HorizontalScrollView
+    private lateinit var candidateContainer: LinearLayout
     private lateinit var fnRow: LinearLayout
+    private lateinit var languageKey: TextView
     private lateinit var voiceKey: TextView
 
     // ── Prefs ────────────────────────────────────────────────────────────────
     private val prefs by lazy { PreferenceManager.getDefaultSharedPreferences(this) }
+    private val chineseEngine = NaturalShuangpinEngine()
+    private var chineseMode = false
     private var voiceClient: VolcengineVoiceInputClient? = null
     private var voiceListening = false
     private var voiceStarting = false
@@ -91,7 +96,10 @@ class TermKeyIMEService : InputMethodService() {
         rootView = layoutInflater.inflate(R.layout.keyboard_view, null)
         macroScrollView = rootView.findViewById(R.id.macro_scroll)
         macroContainer = rootView.findViewById(R.id.macro_container)
+        candidateScrollView = rootView.findViewById(R.id.candidate_scroll)
+        candidateContainer = rootView.findViewById(R.id.candidate_container)
         fnRow = rootView.findViewById(R.id.fn_row)
+        languageKey = rootView.findViewById(R.id.key_lang)
         voiceKey = rootView.findViewById(R.id.key_mic)
 
         initializeKeyLabels()
@@ -106,15 +114,18 @@ class TermKeyIMEService : InputMethodService() {
         super.onStartInputView(info, restarting)
         // Reset modifier state on each new input field
         resetModifiers()
+        clearChineseInput(commitCurrent = false)
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
         super.onFinishInputView(finishingInput)
         cancelVoiceInput()
+        clearChineseInput(commitCurrent = false)
     }
 
     override fun onDestroy() {
         cancelVoiceInput()
+        clearChineseInput(commitCurrent = false)
         super.onDestroy()
     }
 
@@ -129,6 +140,7 @@ class TermKeyIMEService : InputMethodService() {
 
         val showVoice = prefs.getBoolean("show_voice_key", true)
         voiceKey.visibility = if (showVoice) View.VISIBLE else View.GONE
+        updateChineseUi()
         updateVoiceKeyUI()
     }
 
@@ -214,6 +226,7 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_f10 to "F10",
             R.id.key_f11 to "F11",
             R.id.key_f12 to "F12",
+            R.id.key_lang to getString(R.string.key_lang_en),
             R.id.key_mic to getString(R.string.key_mic_idle),
         )
 
@@ -237,6 +250,9 @@ class TermKeyIMEService : InputMethodService() {
         wireModifierKey(R.id.key_shift) {
             shiftActive = !shiftActive
             updateModifierUI()
+        }
+        wireModifierKey(R.id.key_lang) {
+            toggleLanguageMode()
         }
 
         // ── Special keys ──
@@ -338,7 +354,7 @@ class TermKeyIMEService : InputMethodService() {
             if (prefs.getBoolean("long_press_extra", true)) {
                 view.setOnLongClickListener {
                     feedbackVibrate(30)
-                    sendChar(chars.second)
+                    handleCharacterInput(chars.first, chars.second, useAlternate = true)
                     true
                 }
             }
@@ -352,7 +368,7 @@ class TermKeyIMEService : InputMethodService() {
                             val dy = startY - event.y
                             if (dy > 30) { // swipe up
                                 feedbackVibrate(20)
-                                sendChar(chars.second)
+                                handleCharacterInput(chars.first, chars.second, useAlternate = true)
                                 true
                             } else {
                                 false
@@ -365,7 +381,7 @@ class TermKeyIMEService : InputMethodService() {
             view.setOnClickListener {
                 feedbackVibrate()
                 feedbackSound()
-                sendChar(if (shiftActive) chars.second else chars.first)
+                handleCharacterInput(chars.first, chars.second, useAlternate = shiftActive)
                 if (shiftActive) {
                     shiftActive = false
                     updateModifierUI()
@@ -382,6 +398,10 @@ class TermKeyIMEService : InputMethodService() {
      * Alt+key    → send ESC prefix then key (standard terminal convention)
      */
     private fun sendChar(ch: Char) {
+        if (chineseMode && chineseEngine.hasPending() && !ch.isLetter()) {
+            commitChineseSelection()
+        }
+
         val ic = currentInputConnection ?: return
 
         when {
@@ -412,6 +432,9 @@ class TermKeyIMEService : InputMethodService() {
     }
 
     private fun sendEscape() {
+        if (chineseMode && chineseEngine.hasPending()) {
+            clearChineseInput(commitCurrent = false)
+        }
         feedbackVibrate()
         feedbackSound()
         currentInputConnection?.commitText("\u001b", 1)
@@ -419,6 +442,9 @@ class TermKeyIMEService : InputMethodService() {
     }
 
     private fun sendTab() {
+        if (chineseMode && chineseEngine.hasPending()) {
+            commitChineseSelection()
+        }
         feedbackVibrate()
         feedbackSound()
         val ic = currentInputConnection ?: return
@@ -434,6 +460,9 @@ class TermKeyIMEService : InputMethodService() {
     }
 
     private fun sendEnter() {
+        if (chineseMode && chineseEngine.hasPending()) {
+            commitChineseSelection()
+        }
         feedbackVibrate()
         feedbackSound()
         val ic = currentInputConnection ?: return
@@ -449,6 +478,10 @@ class TermKeyIMEService : InputMethodService() {
     }
 
     private fun sendBackspace() {
+        if (chineseMode && chineseEngine.hasPending()) {
+            updateChineseState(chineseEngine.backspace())
+            return
+        }
         feedbackVibrate()
         feedbackSound()
         val ic = currentInputConnection ?: return
@@ -461,6 +494,12 @@ class TermKeyIMEService : InputMethodService() {
     }
 
     private fun sendSpace() {
+        if (chineseMode && chineseEngine.hasPending()) {
+            feedbackVibrate()
+            feedbackSound()
+            commitChineseSelection()
+            return
+        }
         feedbackVibrate()
         feedbackSound()
         val ic = currentInputConnection ?: return
@@ -475,6 +514,9 @@ class TermKeyIMEService : InputMethodService() {
     }
 
     private fun sendKeyCode(keyCode: Int) {
+        if (chineseMode && chineseEngine.hasPending()) {
+            commitChineseSelection()
+        }
         feedbackVibrate()
         feedbackSound()
         val ic = currentInputConnection ?: return
@@ -507,6 +549,7 @@ class TermKeyIMEService : InputMethodService() {
         // Update Shift key visual label if needed
         val shiftView = rootView.findViewById<TextView>(R.id.key_shift)
         shiftView?.alpha = if (shiftActive) 1.0f else 0.7f
+        updateChineseUi()
         updateVoiceKeyUI()
     }
 
@@ -534,12 +577,116 @@ class TermKeyIMEService : InputMethodService() {
         }
     }
 
+    private fun handleCharacterInput(primary: Char, alternate: Char, useAlternate: Boolean) {
+        val isLetter = primary in 'a'..'z'
+        if (chineseMode && isLetter && !ctrlActive && !altActive) {
+            updateChineseState(chineseEngine.append(primary))
+            return
+        }
+
+        if (chineseMode && chineseEngine.hasPending() && !isLetter) {
+            commitChineseSelection()
+        }
+
+        sendChar(if (useAlternate) alternate else primary)
+    }
+
+    private fun toggleLanguageMode() {
+        chineseMode = !chineseMode
+        clearChineseInput(commitCurrent = false)
+        updateChineseUi()
+    }
+
+    private fun updateChineseState(state: ChineseInputState) {
+        val ic = currentInputConnection
+        if (state.rawCode.isEmpty()) {
+            ic?.finishComposingText()
+        } else if (state.previewText.isNotEmpty()) {
+            ic?.setComposingText(state.previewText, 1)
+        }
+        rebuildCandidateBar(state.candidates)
+        updateChineseUi()
+    }
+
+    private fun rebuildCandidateBar(candidates: List<String>) {
+        if (!::candidateContainer.isInitialized) return
+        candidateContainer.removeAllViews()
+        candidates.forEachIndexed { index, candidate ->
+            val candidateView = layoutInflater.inflate(R.layout.macro_button, candidateContainer, false) as TextView
+            candidateView.text = candidate
+            candidateView.setTextColor(
+                ContextCompat.getColor(
+                    this,
+                    if (index == 0) R.color.terminal_green else R.color.terminal_text,
+                ),
+            )
+            candidateView.setOnClickListener {
+                feedbackVibrate(15)
+                feedbackSound()
+                commitChineseSelection(candidate)
+            }
+            candidateContainer.addView(candidateView)
+        }
+        candidateScrollView.visibility = if (chineseMode && candidates.isNotEmpty()) View.VISIBLE else View.GONE
+    }
+
+    private fun commitChineseSelection(candidate: String? = null) {
+        if (!chineseEngine.hasPending()) {
+            candidateScrollView.visibility = View.GONE
+            return
+        }
+
+        val state = chineseEngine.currentState()
+        val resolved = candidate
+            ?: state.candidates.firstOrNull()
+            ?: state.previewText.takeIf { it.isNotBlank() }
+
+        currentInputConnection?.apply {
+            if (!resolved.isNullOrBlank()) {
+                commitText(resolved, 1)
+            } else {
+                finishComposingText()
+            }
+        }
+
+        chineseEngine.clear()
+        rebuildCandidateBar(emptyList())
+        updateChineseUi()
+    }
+
+    private fun clearChineseInput(commitCurrent: Boolean) {
+        if (commitCurrent) {
+            commitChineseSelection()
+        } else {
+            val hadPending = chineseEngine.hasPending()
+            chineseEngine.clear()
+            if (hadPending) {
+                currentInputConnection?.finishComposingText()
+            }
+            rebuildCandidateBar(emptyList())
+            updateChineseUi()
+        }
+    }
+
+    private fun updateChineseUi() {
+        if (!::languageKey.isInitialized || !::candidateScrollView.isInitialized) return
+        languageKey.isActivated = chineseMode
+        languageKey.text = getString(if (chineseMode) R.string.key_lang_zh else R.string.key_lang_en)
+        if (!chineseMode) {
+            candidateScrollView.visibility = View.GONE
+        }
+    }
+
     private fun toggleVoiceInput() {
         Log.d(TAG, "MIC tapped voiceStarting=$voiceStarting voiceListening=$voiceListening voiceStopping=$voiceStopping")
         if (voiceStarting || voiceListening || voiceStopping) {
             showToast(R.string.voice_stopping)
             requestVoiceStop()
             return
+        }
+
+        if (chineseEngine.hasPending()) {
+            commitChineseSelection()
         }
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
