@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TermKey IME</title>
+  <meta
+    name="description"
+    content="Terminal-first Android keyboard with compact Chinese and English layouts, Natural Shuangpin, macros, and streaming voice input."
+  >
+  <meta name="theme-color" content="#08110e">
+  <style>
+    :root {
+      --bg: #07110d;
+      --bg-soft: #0d1814;
+      --panel: rgba(12, 24, 19, 0.82);
+      --panel-strong: rgba(16, 33, 26, 0.92);
+      --line: rgba(125, 255, 191, 0.18);
+      --line-strong: rgba(125, 255, 191, 0.34);
+      --text: #ecfff4;
+      --muted: #9fc5af;
+      --accent: #7dffbf;
+      --accent-strong: #2de18d;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+      --mono: "SFMono-Regular", "JetBrains Mono", "Menlo", "Consolas", monospace;
+      --sans: "Segoe UI", "Helvetica Neue", "Noto Sans", sans-serif;
+      --radius: 24px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(45, 225, 141, 0.16), transparent 34%),
+        radial-gradient(circle at top right, rgba(125, 255, 191, 0.08), transparent 28%),
+        linear-gradient(180deg, #08110e 0%, #050806 100%);
+      min-height: 100vh;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(125, 255, 191, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(125, 255, 191, 0.03) 1px, transparent 1px);
+      background-size: 32px 32px;
+      mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.7), transparent 95%);
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    img {
+      display: block;
+      max-width: 100%;
+    }
+
+    .shell {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 24px 0 72px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 12px 18px;
+      margin-bottom: 24px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(6, 12, 9, 0.72);
+      backdrop-filter: blur(16px);
+      box-shadow: var(--shadow);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      font: 700 14px/1 var(--mono);
+      color: #04110a;
+      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+      box-shadow: 0 10px 30px rgba(45, 225, 141, 0.32);
+    }
+
+    .brand-copy strong,
+    .hero-copy h1,
+    .section h2,
+    .feature h3,
+    .showcase-copy h3,
+    .card h3 {
+      letter-spacing: -0.03em;
+    }
+
+    .brand-copy strong {
+      display: block;
+      font-size: 0.98rem;
+    }
+
+    .brand-copy span,
+    .eyebrow,
+    .lede,
+    .meta,
+    .feature p,
+    .showcase-copy p,
+    .card p,
+    .footer-copy {
+      color: var(--muted);
+    }
+
+    .brand-copy span {
+      font-size: 0.85rem;
+    }
+
+    .nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .nav a,
+    .button,
+    .tag {
+      border: 1px solid var(--line);
+      background: rgba(125, 255, 191, 0.04);
+    }
+
+    .nav a {
+      padding: 10px 14px;
+      border-radius: 999px;
+      font-size: 0.92rem;
+      transition: 140ms ease;
+    }
+
+    .nav a:hover,
+    .button:hover {
+      border-color: var(--line-strong);
+      background: rgba(125, 255, 191, 0.08);
+      transform: translateY(-1px);
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 26px;
+      align-items: stretch;
+      margin-bottom: 26px;
+    }
+
+    .hero-copy,
+    .hero-panel,
+    .section,
+    .showcase,
+    .cta {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      backdrop-filter: blur(18px);
+      box-shadow: var(--shadow);
+    }
+
+    .hero-copy {
+      padding: 34px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-copy::after {
+      content: "";
+      position: absolute;
+      right: -18%;
+      top: -12%;
+      width: 280px;
+      height: 280px;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(45, 225, 141, 0.24), transparent 72%);
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      font: 600 0.76rem/1.4 var(--mono);
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+
+    .hero-copy h1 {
+      margin: 0;
+      font-size: clamp(2.4rem, 5vw, 4.8rem);
+      line-height: 0.95;
+      max-width: 10ch;
+    }
+
+    .lede {
+      max-width: 58ch;
+      margin: 18px 0 0;
+      font-size: 1.05rem;
+      line-height: 1.7;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 28px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 13px 18px;
+      border-radius: 16px;
+      font-weight: 600;
+      transition: 140ms ease;
+    }
+
+    .button.primary {
+      color: #04110a;
+      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+      border-color: transparent;
+      box-shadow: 0 16px 36px rgba(45, 225, 141, 0.26);
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 28px;
+    }
+
+    .tag {
+      padding: 9px 12px;
+      border-radius: 999px;
+      font: 600 0.82rem/1 var(--mono);
+      color: var(--text);
+    }
+
+    .hero-panel {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 16px;
+      background:
+        linear-gradient(180deg, rgba(24, 49, 39, 0.92), rgba(10, 18, 14, 0.94));
+    }
+
+    .terminal {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      overflow: hidden;
+      background: rgba(5, 10, 7, 0.94);
+    }
+
+    .terminal-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(125, 255, 191, 0.04);
+      font: 600 0.82rem/1 var(--mono);
+      color: var(--muted);
+    }
+
+    .dots {
+      display: inline-flex;
+      gap: 6px;
+    }
+
+    .dots span {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(125, 255, 191, 0.56);
+    }
+
+    .terminal pre {
+      margin: 0;
+      padding: 16px 18px 20px;
+      overflow: auto;
+      white-space: pre-wrap;
+      font: 500 0.93rem/1.7 var(--mono);
+      color: #d6ffe8;
+    }
+
+    .accent {
+      color: var(--accent);
+    }
+
+    .hero-shot {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      overflow: hidden;
+      background: rgba(4, 9, 6, 0.95);
+    }
+
+    .hero-shot img {
+      width: 100%;
+      height: auto;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 22px;
+      margin-bottom: 22px;
+    }
+
+    .section {
+      padding: 26px;
+    }
+
+    .section.span-12 {
+      grid-column: span 12;
+    }
+
+    .section.span-7 {
+      grid-column: span 7;
+    }
+
+    .section.span-5 {
+      grid-column: span 5;
+    }
+
+    .section h2 {
+      margin: 0 0 8px;
+      font-size: clamp(1.6rem, 2.6vw, 2.4rem);
+    }
+
+    .section-intro {
+      max-width: 64ch;
+      margin: 0 0 20px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .features {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .feature,
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 18px;
+      background: rgba(125, 255, 191, 0.04);
+    }
+
+    .feature h3,
+    .card h3 {
+      margin: 0 0 10px;
+      font-size: 1.06rem;
+    }
+
+    .feature p,
+    .card p {
+      margin: 0;
+      line-height: 1.65;
+    }
+
+    .flow {
+      display: grid;
+      gap: 14px;
+    }
+
+    .flow-step {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 14px;
+      align-items: start;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(125, 255, 191, 0.04);
+    }
+
+    .flow-step strong {
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      font: 700 0.92rem/1 var(--mono);
+      color: #04110a;
+      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+    }
+
+    .flow-step p {
+      margin: 0;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+
+    .showcase {
+      padding: 18px;
+      display: grid;
+      grid-template-columns: 0.84fr 1.16fr;
+      gap: 18px;
+      align-items: center;
+      margin-bottom: 22px;
+    }
+
+    .showcase-copy {
+      padding: 10px 8px 10px 6px;
+    }
+
+    .showcase-copy h3 {
+      margin: 0 0 10px;
+      font-size: clamp(1.45rem, 2.4vw, 2.1rem);
+    }
+
+    .shot-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .shot {
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      overflow: hidden;
+      background: rgba(4, 9, 6, 0.96);
+    }
+
+    .shot img {
+      width: 100%;
+      aspect-ratio: 9 / 18.5;
+      object-fit: cover;
+    }
+
+    .shot figcaption {
+      padding: 12px 14px 14px;
+      font-size: 0.9rem;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+    }
+
+    .cta {
+      padding: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      background:
+        linear-gradient(135deg, rgba(20, 45, 35, 0.94), rgba(7, 15, 11, 0.96));
+    }
+
+    .cta h2 {
+      margin: 0 0 8px;
+      font-size: clamp(1.5rem, 2.8vw, 2.3rem);
+    }
+
+    .cta p {
+      margin: 0;
+      max-width: 58ch;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .cta-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    footer {
+      padding: 22px 8px 0;
+    }
+
+    .footer-copy {
+      font-size: 0.92rem;
+      line-height: 1.7;
+      text-align: center;
+    }
+
+    @media (max-width: 960px) {
+      .topbar,
+      .hero,
+      .showcase,
+      .cta {
+        grid-template-columns: 1fr;
+      }
+
+      .topbar,
+      .cta {
+        border-radius: 24px;
+      }
+
+      .nav {
+        justify-content: flex-start;
+      }
+
+      .section.span-7,
+      .section.span-5 {
+        grid-column: span 12;
+      }
+
+      .features,
+      .shot-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .shell {
+        width: min(100% - 18px, 1180px);
+        padding-top: 12px;
+      }
+
+      .topbar,
+      .hero-copy,
+      .hero-panel,
+      .section,
+      .showcase,
+      .cta {
+        padding-left: 18px;
+        padding-right: 18px;
+      }
+
+      .hero-copy {
+        padding-top: 24px;
+        padding-bottom: 24px;
+      }
+
+      .hero-copy h1 {
+        max-width: none;
+      }
+
+      .button,
+      .nav a {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .hero-actions,
+      .cta-actions {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">TK</div>
+        <div class="brand-copy">
+          <strong>TermKey IME</strong>
+          <span>Terminal-first Android keyboard</span>
+        </div>
+      </div>
+      <nav class="nav">
+        <a href="https://github.com/risent/TermKeyIME">GitHub</a>
+        <a href="index.zh.html">中文主页</a>
+        <a href="https://github.com/risent/TermKeyIME/blob/master/README.md">README</a>
+        <a href="privacy-policy.html">Privacy</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Android Terminal Keyboard / Chinese Input / Voice</p>
+        <h1>Built for shells. Tuned for Chinese.</h1>
+        <p class="lede">
+          TermKey IME is an Android keyboard for terminal-heavy workflows that still needs real
+          daily input speed: compact Chinese and English layouts, Natural Shuangpin, offline
+          sentence-first candidates, editable macros, and streaming voice input.
+        </p>
+        <div class="hero-actions">
+          <a class="button primary" href="https://github.com/risent/TermKeyIME/blob/master/README.md">Read the project docs</a>
+          <a class="button" href="index.zh.html">切换到中文主页</a>
+        </div>
+        <div class="hero-meta">
+          <span class="tag">FULL / COMPACT_ZH / COMPACT_EN</span>
+          <span class="tag">Natural Shuangpin</span>
+          <span class="tag">Offline lexicon + user frequency</span>
+          <span class="tag">Volcengine streaming ASR</span>
+        </div>
+      </div>
+
+      <div class="hero-panel">
+        <div class="terminal">
+          <div class="terminal-bar">
+            <span class="dots"><span></span><span></span><span></span></span>
+            <span>termkey://capabilities</span>
+          </div>
+          <pre><span class="accent">$</span> input stack
+FULL           -> terminal layout with modifiers, fn row, arrows
+COMPACT_ZH     -> Natural Shuangpin + candidates + symbol mode
+COMPACT_EN     -> letters + numbers + punctuation
+VOICE          -> live recognition into current editor
+MACROS         -> persistent custom snippets
+
+<span class="accent">$</span> chinese mode
+space          -> commit first candidate
+backspace      -> delete code before committed text
+sentence path  -> ranked ahead of broken fragments
+
+<span class="accent">$</span> compact symbol mode
+#+=            -> pure symbol page
+tap symbol     -> insert and return</pre>
+        </div>
+        <div class="hero-shot">
+          <img src="assets/feature-graphic.png" alt="TermKey IME feature graphic">
+        </div>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section class="section span-12" id="features">
+        <p class="eyebrow">Why It Exists</p>
+        <h2>One keyboard for terminals, Chinese text, and fast correction.</h2>
+        <p class="section-intro">
+          Most Android keyboards optimize for chat. TermKey optimizes for shell sessions, SSH,
+          compact editing, and bilingual input without losing direct control over modifiers,
+          symbols, or candidate flow.
+        </p>
+        <div class="features">
+          <article class="feature">
+            <h3>Terminal-first key behavior</h3>
+            <p>
+              Sticky <code>Ctrl</code>, <code>Alt</code>, <code>Shift</code>, control characters,
+              function keys, arrows, paging keys, and a full layout when the session needs it.
+            </p>
+          </article>
+          <article class="feature">
+            <h3>Natural Shuangpin that stays compact</h3>
+            <p>
+              Dedicated compact Chinese mode with offline lexicon lookup, phrase and sentence-first
+              ranking, and local user frequency learning on device.
+            </p>
+          </article>
+          <article class="feature">
+            <h3>Voice and symbols without mode chaos</h3>
+            <p>
+              Live streaming voice input, an isolated symbol page, adaptive touch targets, and
+              delete gestures for dense layouts that still feel controllable.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section span-7">
+        <p class="eyebrow">Chinese Flow</p>
+        <h2>Sentence-first double pinyin.</h2>
+        <p class="section-intro">
+          Chinese mode keeps the candidate bar visible, shows the leading candidate as composing
+          text, and lets <code>Space</code> confirm the best path. The engine prefers full phrases
+          and sentence-level matches before broken character fragments.
+        </p>
+        <div class="flow">
+          <div class="flow-step">
+            <strong>01</strong>
+            <p>Enter Natural Shuangpin code in compact Chinese mode. The candidate bar stays live.</p>
+          </div>
+          <div class="flow-step">
+            <strong>02</strong>
+            <p>Phrase and sentence candidates are ranked with offline frequency data plus local learning.</p>
+          </div>
+          <div class="flow-step">
+            <strong>03</strong>
+            <p>Tap a candidate or press <code>Space</code> to commit the first result and start the next phrase immediately.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section span-5">
+        <p class="eyebrow">Runtime Layouts</p>
+        <h2>Three layouts, one IME.</h2>
+        <div class="flow">
+          <div class="card">
+            <h3>FULL</h3>
+            <p>Everything visible: modifiers, arrows, paging, macros, and function row.</p>
+          </div>
+          <div class="card">
+            <h3>COMPACT_ZH / COMPACT_EN</h3>
+            <p>Reduced layouts tuned for thumb reach, with common punctuation and adaptive hitboxes.</p>
+          </div>
+          <div class="card">
+            <h3>COMPACT_SYMBOL</h3>
+            <p>A dedicated symbol-only page that inserts once and returns to the previous compact mode.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="showcase" id="gallery">
+      <div class="showcase-copy">
+        <p class="eyebrow">On Device</p>
+        <h3>Real screens, not mockups.</h3>
+        <p>
+          The current project already has real device captures for setup, compact keyboard usage,
+          Chinese candidate flow, and voice recording. These same assets can be reused for store
+          listing work and project documentation.
+        </p>
+      </div>
+      <div class="shot-grid">
+        <figure class="shot">
+          <img src="assets/keyboard.png" alt="TermKey compact keyboard on a device">
+          <figcaption>Compact keyboard view for terminal-friendly editing.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="assets/chinese.png" alt="Chinese candidate bar in TermKey">
+          <figcaption>Natural Shuangpin with visible sentence-first candidates.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="assets/voice.png" alt="Voice input recording in TermKey">
+          <figcaption>Streaming voice input with live recognition feedback.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section class="section span-12">
+        <p class="eyebrow">Project Notes</p>
+        <h2>What ships in the repo today.</h2>
+        <div class="features">
+          <article class="feature">
+            <h3>Offline Chinese lexicon</h3>
+            <p>
+              The Chinese engine ships with a bundled lexicon and persists user frequency locally,
+              so ranking improves per device without requiring cloud sync.
+            </p>
+          </article>
+          <article class="feature">
+            <h3>Editable macros</h3>
+            <p>
+              Macro buttons are editable from settings and persisted in the same app storage the
+              IME reads at runtime.
+            </p>
+          </article>
+          <article class="feature">
+            <h3>Voice configuration stays explicit</h3>
+            <p>
+              Voice input depends on Volcengine credentials. The rest of the keyboard remains usable
+              offline and does not require a network service.
+            </p>
+          </article>
+        </div>
+      </section>
+    </div>
+
+    <section class="cta">
+      <div>
+        <p class="eyebrow">Explore Further</p>
+        <h2>Use this page as the GitHub Pages landing screen.</h2>
+        <p>
+          If you publish the repository with GitHub Pages using the <code>/docs</code> folder, this
+          file can serve as the public homepage while the full technical details remain in the repo
+          README and privacy policy pages.
+        </p>
+      </div>
+      <div class="cta-actions">
+        <a class="button primary" href="https://github.com/risent/TermKeyIME/blob/master/README.md">Project README</a>
+        <a class="button" href="index.zh.html">中文主页</a>
+        <a class="button" href="privacy-policy.html">Privacy Policy</a>
+      </div>
+    </section>
+
+    <footer>
+      <p class="footer-copy">
+        TermKey IME is an Android keyboard project for terminal-heavy workflows, compact Chinese
+        input, and direct control over symbols, modifiers, and voice input.
+      </p>
+    </footer>
+  </div>
+</body>
+</html>

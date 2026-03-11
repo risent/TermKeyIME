@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TermKey IME | 终端键盘与双拼输入</title>
+  <meta
+    name="description"
+    content="面向 Android 的终端优先键盘，支持紧凑中英文布局、自然码双拼、整句候选、宏栏和流式语音输入。"
+  >
+  <meta name="theme-color" content="#08110e">
+  <style>
+    :root {
+      --bg: #07110d;
+      --panel: rgba(12, 24, 19, 0.82);
+      --line: rgba(125, 255, 191, 0.18);
+      --line-strong: rgba(125, 255, 191, 0.34);
+      --text: #ecfff4;
+      --muted: #9fc5af;
+      --accent: #7dffbf;
+      --accent-strong: #2de18d;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+      --mono: "SFMono-Regular", "JetBrains Mono", "Menlo", "Consolas", monospace;
+      --sans: "Segoe UI", "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+      --radius: 24px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(45, 225, 141, 0.16), transparent 34%),
+        radial-gradient(circle at top right, rgba(125, 255, 191, 0.08), transparent 28%),
+        linear-gradient(180deg, #08110e 0%, #050806 100%);
+      min-height: 100vh;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(125, 255, 191, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(125, 255, 191, 0.03) 1px, transparent 1px);
+      background-size: 32px 32px;
+      mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.7), transparent 95%);
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    img {
+      display: block;
+      max-width: 100%;
+    }
+
+    .shell {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 24px 0 72px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 12px 18px;
+      margin-bottom: 24px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(6, 12, 9, 0.72);
+      backdrop-filter: blur(16px);
+      box-shadow: var(--shadow);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      font: 700 14px/1 var(--mono);
+      color: #04110a;
+      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+      box-shadow: 0 10px 30px rgba(45, 225, 141, 0.32);
+    }
+
+    .brand-copy strong,
+    .hero-copy h1,
+    .section h2,
+    .feature h3,
+    .showcase-copy h3,
+    .card h3 {
+      letter-spacing: -0.03em;
+    }
+
+    .brand-copy strong {
+      display: block;
+      font-size: 0.98rem;
+    }
+
+    .brand-copy span,
+    .eyebrow,
+    .lede,
+    .feature p,
+    .showcase-copy p,
+    .card p,
+    .footer-copy {
+      color: var(--muted);
+    }
+
+    .brand-copy span {
+      font-size: 0.85rem;
+    }
+
+    .nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .nav a,
+    .button,
+    .tag {
+      border: 1px solid var(--line);
+      background: rgba(125, 255, 191, 0.04);
+    }
+
+    .nav a {
+      padding: 10px 14px;
+      border-radius: 999px;
+      font-size: 0.92rem;
+      transition: 140ms ease;
+    }
+
+    .nav a:hover,
+    .button:hover {
+      border-color: var(--line-strong);
+      background: rgba(125, 255, 191, 0.08);
+      transform: translateY(-1px);
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.08fr 0.92fr;
+      gap: 26px;
+      align-items: stretch;
+      margin-bottom: 26px;
+    }
+
+    .hero-copy,
+    .hero-panel,
+    .section,
+    .showcase,
+    .cta {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      backdrop-filter: blur(18px);
+      box-shadow: var(--shadow);
+    }
+
+    .hero-copy {
+      padding: 34px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-copy::after {
+      content: "";
+      position: absolute;
+      right: -18%;
+      top: -12%;
+      width: 280px;
+      height: 280px;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(45, 225, 141, 0.24), transparent 72%);
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      font: 600 0.76rem/1.4 var(--mono);
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+
+    .hero-copy h1 {
+      margin: 0;
+      font-size: clamp(2.2rem, 4.8vw, 4.6rem);
+      line-height: 1.02;
+      max-width: 10ch;
+    }
+
+    .lede {
+      max-width: 58ch;
+      margin: 18px 0 0;
+      font-size: 1.05rem;
+      line-height: 1.8;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 28px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 13px 18px;
+      border-radius: 16px;
+      font-weight: 600;
+      transition: 140ms ease;
+    }
+
+    .button.primary {
+      color: #04110a;
+      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+      border-color: transparent;
+      box-shadow: 0 16px 36px rgba(45, 225, 141, 0.26);
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 28px;
+    }
+
+    .tag {
+      padding: 9px 12px;
+      border-radius: 999px;
+      font: 600 0.82rem/1 var(--mono);
+      color: var(--text);
+    }
+
+    .hero-panel {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 16px;
+      background: linear-gradient(180deg, rgba(24, 49, 39, 0.92), rgba(10, 18, 14, 0.94));
+    }
+
+    .terminal {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      overflow: hidden;
+      background: rgba(5, 10, 7, 0.94);
+    }
+
+    .terminal-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(125, 255, 191, 0.04);
+      font: 600 0.82rem/1 var(--mono);
+      color: var(--muted);
+    }
+
+    .dots {
+      display: inline-flex;
+      gap: 6px;
+    }
+
+    .dots span {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(125, 255, 191, 0.56);
+    }
+
+    .terminal pre {
+      margin: 0;
+      padding: 16px 18px 20px;
+      overflow: auto;
+      white-space: pre-wrap;
+      font: 500 0.93rem/1.75 var(--mono);
+      color: #d6ffe8;
+    }
+
+    .accent {
+      color: var(--accent);
+    }
+
+    .hero-shot {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      overflow: hidden;
+      background: rgba(4, 9, 6, 0.95);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 22px;
+      margin-bottom: 22px;
+    }
+
+    .section {
+      padding: 26px;
+    }
+
+    .section.span-12 {
+      grid-column: span 12;
+    }
+
+    .section.span-7 {
+      grid-column: span 7;
+    }
+
+    .section.span-5 {
+      grid-column: span 5;
+    }
+
+    .section h2 {
+      margin: 0 0 8px;
+      font-size: clamp(1.55rem, 2.5vw, 2.3rem);
+    }
+
+    .section-intro {
+      max-width: 64ch;
+      margin: 0 0 20px;
+      color: var(--muted);
+      line-height: 1.8;
+    }
+
+    .features {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .feature,
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 18px;
+      background: rgba(125, 255, 191, 0.04);
+    }
+
+    .feature h3,
+    .card h3 {
+      margin: 0 0 10px;
+      font-size: 1.06rem;
+    }
+
+    .feature p,
+    .card p {
+      margin: 0;
+      line-height: 1.75;
+    }
+
+    .flow {
+      display: grid;
+      gap: 14px;
+    }
+
+    .flow-step {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 14px;
+      align-items: start;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(125, 255, 191, 0.04);
+    }
+
+    .flow-step strong {
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      font: 700 0.92rem/1 var(--mono);
+      color: #04110a;
+      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+    }
+
+    .flow-step p {
+      margin: 0;
+      line-height: 1.8;
+      color: var(--muted);
+    }
+
+    .showcase {
+      padding: 18px;
+      display: grid;
+      grid-template-columns: 0.84fr 1.16fr;
+      gap: 18px;
+      align-items: center;
+      margin-bottom: 22px;
+    }
+
+    .showcase-copy {
+      padding: 10px 8px 10px 6px;
+    }
+
+    .showcase-copy h3 {
+      margin: 0 0 10px;
+      font-size: clamp(1.45rem, 2.4vw, 2.1rem);
+    }
+
+    .shot-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .shot {
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      overflow: hidden;
+      background: rgba(4, 9, 6, 0.96);
+    }
+
+    .shot img {
+      width: 100%;
+      aspect-ratio: 9 / 18.5;
+      object-fit: cover;
+    }
+
+    .shot figcaption {
+      padding: 12px 14px 14px;
+      font-size: 0.9rem;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+    }
+
+    .cta {
+      padding: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      background: linear-gradient(135deg, rgba(20, 45, 35, 0.94), rgba(7, 15, 11, 0.96));
+    }
+
+    .cta h2 {
+      margin: 0 0 8px;
+      font-size: clamp(1.5rem, 2.8vw, 2.3rem);
+    }
+
+    .cta p {
+      margin: 0;
+      max-width: 58ch;
+      color: var(--muted);
+      line-height: 1.8;
+    }
+
+    .cta-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    footer {
+      padding: 22px 8px 0;
+    }
+
+    .footer-copy {
+      font-size: 0.92rem;
+      line-height: 1.8;
+      text-align: center;
+    }
+
+    @media (max-width: 960px) {
+      .hero,
+      .showcase,
+      .cta {
+        grid-template-columns: 1fr;
+      }
+
+      .section.span-7,
+      .section.span-5 {
+        grid-column: span 12;
+      }
+
+      .features,
+      .shot-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .nav {
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .shell {
+        width: min(100% - 18px, 1180px);
+        padding-top: 12px;
+      }
+
+      .topbar,
+      .hero-copy,
+      .hero-panel,
+      .section,
+      .showcase,
+      .cta {
+        padding-left: 18px;
+        padding-right: 18px;
+      }
+
+      .button,
+      .nav a {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">TK</div>
+        <div class="brand-copy">
+          <strong>TermKey IME</strong>
+          <span>面向终端工作流的 Android 键盘</span>
+        </div>
+      </div>
+      <nav class="nav">
+        <a href="index.html">English</a>
+        <a href="https://github.com/risent/TermKeyIME">GitHub</a>
+        <a href="https://github.com/risent/TermKeyIME/blob/master/README_ZH.md">README_ZH</a>
+        <a href="privacy-policy.html">隐私政策</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Android Terminal Keyboard / Shuangpin / Voice</p>
+        <h1>终端优先，也适合高频中文输入。</h1>
+        <p class="lede">
+          TermKey IME 是一个面向 Android 的终端键盘项目。它保留了终端场景真正需要的控制键、
+          功能键和方向键，同时提供紧凑中文布局、自然码双拼、离线词组与整句候选、可编辑宏栏，
+          以及流式语音输入。
+        </p>
+        <div class="hero-actions">
+          <a class="button primary" href="https://github.com/risent/TermKeyIME/blob/master/README_ZH.md">阅读中文文档</a>
+          <a class="button" href="index.html">Switch to English</a>
+        </div>
+        <div class="hero-meta">
+          <span class="tag">FULL / COMPACT_ZH / COMPACT_EN</span>
+          <span class="tag">自然码双拼</span>
+          <span class="tag">词组与整句优先</span>
+          <span class="tag">Volcengine 流式语音</span>
+        </div>
+      </div>
+
+      <div class="hero-panel">
+        <div class="terminal">
+          <div class="terminal-bar">
+            <span class="dots"><span></span><span></span><span></span></span>
+            <span>termkey://overview</span>
+          </div>
+          <pre><span class="accent">$</span> 布局模式
+FULL           -> 完整终端布局，保留修饰键与功能区
+COMPACT_ZH     -> 中文紧凑布局，双拼 + 候选栏
+COMPACT_EN     -> 英文紧凑布局，字母 + 数字 + 常用标点
+COMPACT_SYMBOL -> 独立符号页，点一下即回退
+
+<span class="accent">$</span> 中文输入
+space          -> 默认确认首候选
+backspace      -> 先删双拼编码，再删正文
+sentence path  -> 整句和长词优先，不靠碎片拼接
+
+<span class="accent">$</span> 语音输入
+mic            -> 实时识别并写入当前输入框</pre>
+        </div>
+        <div class="hero-shot">
+          <img src="assets/feature-graphic.png" alt="TermKey IME 功能图">
+        </div>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section class="section span-12">
+        <p class="eyebrow">项目特点</p>
+        <h2>不是聊天键盘，而是给终端和高密度输入准备的键盘。</h2>
+        <p class="section-intro">
+          大多数 Android 键盘更偏向社交聊天。TermKey 的重点是 shell、SSH、远程开发、命令输入和紧凑中文输入。
+          目标不是做一个功能最全的输入法，而是做一个在真实终端场景里更顺手的工具。
+        </p>
+        <div class="features">
+          <article class="feature">
+            <h3>终端场景可直接使用</h3>
+            <p>
+              支持粘滞 <code>Ctrl</code>、<code>Alt</code>、<code>Shift</code>，真实控制字符，
+              方向键、翻页键、Home/End、F1-F12 和完整布局切换。
+            </p>
+          </article>
+          <article class="feature">
+            <h3>紧凑中文输入不是附属功能</h3>
+            <p>
+              中文模式有常驻候选栏、自然码双拼、离线词库、本地词频学习，以及词组和整句优先排序。
+            </p>
+          </article>
+          <article class="feature">
+            <h3>密集布局也保持可控</h3>
+            <p>
+              支持自适应命中区域、独立符号页、长按连续删除、上滑清空，以及流式语音输入作为补充通道。
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section span-7">
+        <p class="eyebrow">中文输入流程</p>
+        <h2>双拼输入，直接以词组和整句为目标。</h2>
+        <p class="section-intro">
+          在中文紧凑模式下，候选栏会持续可见。输入自然码双拼后，首候选会作为预编辑文本显示。
+          排序逻辑会优先考虑完整词组、长词和整句路径，再回退到拆分结果。
+        </p>
+        <div class="flow">
+          <div class="flow-step">
+            <strong>01</strong>
+            <p>输入双拼编码，候选会立即刷新，单字母阶段也能给出高频字前缀候选。</p>
+          </div>
+          <div class="flow-step">
+            <strong>02</strong>
+            <p>离线词库和本地词频学习共同参与排序，同一串编码会越来越贴近你的选择习惯。</p>
+          </div>
+          <div class="flow-step">
+            <strong>03</strong>
+            <p>按 <code>Space</code> 默认确认首候选，或者点选候选上屏，确认后立即进入下一段输入。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section span-5">
+        <p class="eyebrow">布局形态</p>
+        <h2>运行时可切三种主模式。</h2>
+        <div class="flow">
+          <div class="card">
+            <h3>FULL</h3>
+            <p>完整终端布局，保留功能键行、方向键、控制键和宏栏，适合 shell 重度操作。</p>
+          </div>
+          <div class="card">
+            <h3>COMPACT_ZH / COMPACT_EN</h3>
+            <p>面向拇指操作的紧凑布局，保留必要键位并强化触控命中区域。</p>
+          </div>
+          <div class="card">
+            <h3>COMPACT_SYMBOL</h3>
+            <p>单独的符号模式，只显示标点和常用符号，输入一次后自动回到原紧凑模式。</p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="showcase">
+      <div class="showcase-copy">
+        <p class="eyebrow">真机截图</p>
+        <h3>页面展示直接来自当前项目。</h3>
+        <p>
+          这里使用的是项目已有的真机截图，包括主键盘界面、中文候选界面和语音输入界面。
+          它们也可以直接复用于 GitHub Pages、README 或应用商店素材。
+        </p>
+      </div>
+      <div class="shot-grid">
+        <figure class="shot">
+          <img src="assets/keyboard.png" alt="TermKey 键盘界面">
+          <figcaption>终端优先的主键盘视图。</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="assets/chinese.png" alt="双拼候选栏界面">
+          <figcaption>自然码双拼与整句优先候选。</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="assets/voice.png" alt="语音输入界面">
+          <figcaption>流式语音输入与实时识别反馈。</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section class="section span-12">
+        <p class="eyebrow">补充说明</p>
+        <h2>当前仓库里已经包含的能力。</h2>
+        <div class="features">
+          <article class="feature">
+            <h3>离线中文词库</h3>
+            <p>
+              中文输入引擎随应用内置词库，用户词频保存在本地设备，不依赖云端同步才能正常使用。
+            </p>
+          </article>
+          <article class="feature">
+            <h3>宏栏可编辑</h3>
+            <p>
+              宏按钮可在设置页中编辑，IME 启动时直接读取同一份持久化数据，适合命令片段和高频文本。
+            </p>
+          </article>
+          <article class="feature">
+            <h3>语音配置保持显式</h3>
+            <p>
+              语音输入依赖 Volcengine 凭据配置。除语音外，键盘主体功能仍然可以离线运行。
+            </p>
+          </article>
+        </div>
+      </section>
+    </div>
+
+    <section class="cta">
+      <div>
+        <p class="eyebrow">GitHub Pages</p>
+        <h2>这页可以直接作为项目公开主页。</h2>
+        <p>
+          如果仓库在 GitHub Pages 中启用 <code>/docs</code> 目录发布，这个中文页面可以作为对外介绍页，
+          而详细的构建、使用和实现说明仍然放在仓库 README 与隐私政策页面中。
+        </p>
+      </div>
+      <div class="cta-actions">
+        <a class="button primary" href="index.html">English Home</a>
+        <a class="button" href="https://github.com/risent/TermKeyIME/blob/master/README_ZH.md">README_ZH</a>
+        <a class="button" href="privacy-policy.html">隐私政策</a>
+      </div>
+    </section>
+
+    <footer>
+      <p class="footer-copy">
+        TermKey IME 适合终端、SSH 和高频中文输入场景，目标是把控制键、双拼输入、符号和语音放进同一套可控的 Android 键盘里。
+      </p>
+    </footer>
+  </div>
+</body>
+</html>
