@@ -1,5 +1,7 @@
 # TermKey IME
 
+Built for terminals. Tuned for Chinese.
+
 Android terminal keyboard with compact Chinese/English layouts, Natural Shuangpin input, editable macros, and streaming voice input.
 
 ## Features
