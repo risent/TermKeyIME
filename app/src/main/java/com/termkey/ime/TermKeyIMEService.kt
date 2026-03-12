@@ -123,19 +123,6 @@ class TermKeyIMEService : InputMethodService() {
         )
 
         private val COMPACT_ZH_KEY_IDS = setOf(
-            R.id.key_1,
-            R.id.key_2,
-            R.id.key_3,
-            R.id.key_4,
-            R.id.key_5,
-            R.id.key_6,
-            R.id.key_7,
-            R.id.key_8,
-            R.id.key_9,
-            R.id.key_0,
-            R.id.key_minus,
-            R.id.key_equals,
-            R.id.key_backspace,
             R.id.key_q,
             R.id.key_w,
             R.id.key_e,
@@ -1513,6 +1500,12 @@ class TermKeyIMEService : InputMethodService() {
                 macroSeparator.visibility = View.GONE
                 fnRow.visibility = View.GONE
             }
+        }
+
+        rootView.findViewById<View>(R.id.key_row_1)?.visibility = if (layoutMode == KeyboardLayoutMode.COMPACT_ZH) {
+            View.GONE
+        } else {
+            View.VISIBLE
         }
 
         voiceKey.visibility = if (showVoice && (layoutMode == KeyboardLayoutMode.FULL || visibleCompactKeys.contains(R.id.key_mic))) {
