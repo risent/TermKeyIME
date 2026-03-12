@@ -8,10 +8,12 @@ import kotlin.math.max
 import kotlin.math.min
 
 private data class LexiconEntry(
+    val pinyinKey: String,
     val text: String,
     val baseFreq: Int,
     val syllableCount: Int,
     val userScore: Int,
+    val contextScore: Int,
 )
 
 private data class CandidatePath(
@@ -27,12 +29,13 @@ private data class CandidatePath(
  */
 class ChineseLexiconStore(
     context: Context,
-) {
+) : ChineseLexiconDataSource {
     companion object {
         private const val TAG = "TermKeyLexicon"
         private const val DB_NAME = "chinese_lexicon.db"
-        private const val DB_VERSION = 2
+        private const val DB_VERSION = 3
         private const val USER_SCORE_INCREMENT = 240
+        private const val CONTEXT_SCORE_INCREMENT = 320
         private const val MAX_SENTENCE_SYLLABLES = 8
         private const val MAX_SPAN_SYLLABLES = 6
         private const val PATH_BEAM_WIDTH = 16
@@ -57,77 +60,109 @@ class ChineseLexiconStore(
         }
     }
 
-    fun lookupCandidates(syllables: List<String>, limit: Int = EXACT_QUERY_LIMIT): ChineseCandidateQueryResult {
+    override fun lookupCandidates(
+        syllables: List<String>,
+        contextBefore: String,
+        limit: Int,
+    ): ChineseCandidateQueryResult {
         if (syllables.isEmpty()) {
-            return ChineseCandidateQueryResult(emptyList(), ChineseCandidateKind.NONE)
+            return ChineseCandidateQueryResult(emptyList())
         }
-        val resolvedLimit = if (syllables.size == 1) max(limit, SINGLE_SYLLABLE_LIMIT) else limit
-        val fullKey = syllables.joinToString("'")
-        val exactMatches = queryEntries(fullKey, resolvedLimit)
-        val bestPaths = if (syllables.size <= MAX_SENTENCE_SYLLABLES) {
-            buildBestPaths(syllables)
-        } else {
-            emptyList()
-        }
+        val totalSyllables = syllables.size
+        val resolvedLimit = if (totalSyllables == 1) max(limit, SINGLE_SYLLABLE_LIMIT) else limit
 
         data class ScoredCandidate(
+            val pinyinKey: String,
             val text: String,
             val score: Int,
             val kind: ChineseCandidateKind,
             val segmentCount: Int,
+            val consumedSyllables: Int,
         )
         val scored = linkedMapOf<String, ScoredCandidate>()
-        exactMatches.forEach { entry ->
-            val kind = classifyExactCandidate(entry, syllables.size)
-            val score = scoreEntry(entry, isWholeSpan = true, candidateKind = kind)
-            val current = scored[entry.text]
-            if (current == null || score > current.score) {
-                scored[entry.text] = ScoredCandidate(
-                    text = entry.text,
-                    score = score,
-                    kind = kind,
-                    segmentCount = 1,
+
+        for (consumedSyllables in totalSyllables downTo 1) {
+            val prefixSyllables = syllables.take(consumedSyllables)
+            val fullKey = prefixSyllables.joinToString("'")
+            val exactMatches = queryEntries(fullKey, resolvedLimit, contextBefore)
+            exactMatches.forEach { entry ->
+                val kind = classifyExactCandidate(entry, consumedSyllables)
+                val score = scoreEntry(
+                    entry,
+                    isWholeSpan = consumedSyllables == totalSyllables,
+                    candidateKind = kind,
+                    consumedSyllables = consumedSyllables,
+                    totalSyllables = totalSyllables,
                 )
+                val current = scored[entry.text]
+                if (current == null || score > current.score) {
+                    scored[entry.text] = ScoredCandidate(
+                        pinyinKey = fullKey,
+                        text = entry.text,
+                        score = score,
+                        kind = kind,
+                        segmentCount = 1,
+                        consumedSyllables = consumedSyllables,
+                    )
+                }
             }
-        }
-        bestPaths.forEach { path ->
-            val kind = if (syllables.size >= 3 && path.segmentCount > 1) {
-                ChineseCandidateKind.SENTENCE
-            } else if (path.segmentCount == 1) {
-                ChineseCandidateKind.PHRASE
+
+            val bestPaths = if (consumedSyllables <= MAX_SENTENCE_SYLLABLES) {
+                buildBestPaths(prefixSyllables, contextBefore, totalSyllables)
             } else {
-                ChineseCandidateKind.FALLBACK
+                emptyList()
             }
-            val current = scored[path.text]
-            if (current == null || path.score > current.score) {
-                scored[path.text] = ScoredCandidate(
-                    text = path.text,
-                    score = path.score,
-                    kind = kind,
-                    segmentCount = path.segmentCount,
-                )
+            bestPaths.forEach { path ->
+                val kind = if (consumedSyllables >= 3 && path.segmentCount > 1) {
+                    ChineseCandidateKind.SENTENCE
+                } else if (path.segmentCount == 1) {
+                    ChineseCandidateKind.PHRASE
+                } else {
+                    ChineseCandidateKind.FALLBACK
+                }
+                val current = scored[path.text]
+                if (current == null || path.score > current.score) {
+                    scored[path.text] = ScoredCandidate(
+                        pinyinKey = fullKey,
+                        text = path.text,
+                        score = path.score,
+                        kind = kind,
+                        segmentCount = path.segmentCount,
+                        consumedSyllables = consumedSyllables,
+                    )
+                }
             }
         }
 
         val ordered = scored.values
             .sortedWith(
                 compareByDescending<ScoredCandidate> { candidateKindPriority(it.kind) }
+                    .thenByDescending { it.consumedSyllables }
                     .thenBy { it.segmentCount }
                     .thenByDescending { it.score }
                     .thenByDescending { it.text.length }
                     .thenBy { it.text },
             )
-        val candidates = ordered
-            .map { it.text }
+        val candidates = preferConsumedLengthLadder(ordered) { it.consumedSyllables }
+            .map {
+                ChineseCandidate(
+                    text = it.text,
+                    pinyinKey = it.pinyinKey,
+                    consumedCodeLength = it.consumedSyllables * 2,
+                    consumedSyllables = it.consumedSyllables,
+                    score = it.score,
+                    kind = it.kind,
+                )
+            }
             .take(resolvedLimit)
-        val primaryKind = ordered.firstOrNull()?.kind ?: ChineseCandidateKind.NONE
-        return ChineseCandidateQueryResult(candidates, primaryKind)
+        return ChineseCandidateQueryResult(candidates)
     }
 
-    fun recordSelection(pinyinKey: String, text: String) {
+    override fun recordSelection(pinyinKey: String, text: String, contextBefore: String) {
         val db = database ?: return
         if (pinyinKey.isBlank() || text.isBlank()) return
         val syllableCount = pinyinKey.count { it == '\'' } + 1
+        val normalizedContext = normalizeContext(contextBefore)
         runCatching {
             db.execSQL(
                 """
@@ -140,19 +175,45 @@ class ChineseLexiconStore(
                 """.trimIndent(),
                 arrayOf(pinyinKey, text, syllableCount, USER_SCORE_INCREMENT),
             )
+            if (normalizedContext.isNotEmpty()) {
+                db.execSQL(
+                    """
+                    INSERT INTO user_context_freq(context_before, pinyin_key, text, score, updated_at)
+                    VALUES (?, ?, ?, ?, strftime('%s', 'now'))
+                    ON CONFLICT(context_before, pinyin_key, text) DO UPDATE SET
+                        score = user_context_freq.score + excluded.score,
+                        updated_at = excluded.updated_at
+                    """.trimIndent(),
+                    arrayOf(normalizedContext, pinyinKey, text, CONTEXT_SCORE_INCREMENT),
+                )
+            }
         }.onFailure {
             Log.e(TAG, "Failed to persist user frequency for $pinyinKey -> $text", it)
         }
         invalidateCacheFor(pinyinKey)
     }
 
-    fun lookupInitialCandidates(initialPrefix: String, limit: Int = INITIAL_PREFIX_LIMIT): List<String> {
+    override fun lookupInitialCandidates(
+        initialPrefix: String,
+        contextBefore: String,
+        limit: Int,
+    ): List<ChineseCandidate> {
         val db = database ?: return emptyList()
         if (initialPrefix.isBlank()) return emptyList()
-        val cacheKey = "prefix|$limit|$initialPrefix"
+        val normalizedContext = normalizeContext(contextBefore)
+        val cacheKey = "prefix|$limit|$normalizedContext|$initialPrefix"
         synchronized(queryCache) {
             queryCache[cacheKey]?.let { cached ->
-                return cached.map { it.text }
+                return cached.mapIndexed { index, entry ->
+                    ChineseCandidate(
+                        text = entry.text,
+                        pinyinKey = entry.pinyinKey,
+                        consumedCodeLength = 1,
+                        consumedSyllables = 1,
+                        score = scoreEntry(entry, isWholeSpan = false, candidateKind = ChineseCandidateKind.FALLBACK, consumedSyllables = 1, totalSyllables = 1) - index,
+                        kind = ChineseCandidateKind.FALLBACK,
+                    )
+                }
             }
         }
 
@@ -160,17 +221,23 @@ class ChineseLexiconStore(
         val rows = mutableListOf<LexiconEntry>()
         db.rawQuery(
             """
-            SELECT text, MAX(base_freq) AS base_freq, MAX(syllable_count) AS syllable_count, MAX(user_score) AS user_score
+            SELECT pinyin_key, text, MAX(base_freq) AS base_freq, MAX(syllable_count) AS syllable_count, MAX(user_score) AS user_score, MAX(context_score) AS context_score
             FROM (
                 SELECT
+                    l.pinyin_key AS pinyin_key,
                     l.text AS text,
                     l.freq AS base_freq,
                     l.syllable_count AS syllable_count,
-                    COALESCE(u.score, 0) AS user_score
+                    COALESCE(u.score, 0) AS user_score,
+                    COALESCE(uc.score, 0) AS context_score
                 FROM lexicon l
                 LEFT JOIN user_freq u
                     ON u.pinyin_key = l.pinyin_key
                    AND u.text = l.text
+                LEFT JOIN user_context_freq uc
+                    ON uc.context_before = ?
+                   AND uc.pinyin_key = l.pinyin_key
+                   AND uc.text = l.text
                 WHERE l.syllable_count = 1
                   AND length(l.text) = 1
                   AND l.pinyin_key LIKE ?
@@ -178,27 +245,35 @@ class ChineseLexiconStore(
                 UNION ALL
 
                 SELECT
+                    u.pinyin_key AS pinyin_key,
                     u.text AS text,
                     0 AS base_freq,
                     u.syllable_count AS syllable_count,
-                    u.score AS user_score
+                    u.score AS user_score,
+                    COALESCE(uc.score, 0) AS context_score
                 FROM user_freq u
+                LEFT JOIN user_context_freq uc
+                    ON uc.context_before = ?
+                   AND uc.pinyin_key = u.pinyin_key
+                   AND uc.text = u.text
                 WHERE u.syllable_count = 1
                   AND length(u.text) = 1
                   AND u.pinyin_key LIKE ?
             )
-            GROUP BY text
-            ORDER BY (base_freq + user_score) DESC, text ASC
+            GROUP BY pinyin_key, text
+            ORDER BY (base_freq + user_score + context_score) DESC, text ASC
             LIMIT ?
             """.trimIndent(),
-            arrayOf(likePattern, likePattern, limit.toString()),
+            arrayOf(normalizedContext, likePattern, normalizedContext, likePattern, limit.toString()),
         ).use { cursor ->
             while (cursor.moveToNext()) {
                 rows += LexiconEntry(
-                    text = cursor.getString(0),
-                    baseFreq = cursor.getInt(1),
-                    syllableCount = cursor.getInt(2),
-                    userScore = cursor.getInt(3),
+                    pinyinKey = cursor.getString(0),
+                    text = cursor.getString(1),
+                    baseFreq = cursor.getInt(2),
+                    syllableCount = cursor.getInt(3),
+                    userScore = cursor.getInt(4),
+                    contextScore = cursor.getInt(5),
                 )
             }
         }
@@ -206,16 +281,46 @@ class ChineseLexiconStore(
         synchronized(queryCache) {
             queryCache[cacheKey] = rows
         }
-        return rows.map { it.text }
+        return rows.mapIndexed { index, entry ->
+            ChineseCandidate(
+                text = entry.text,
+                pinyinKey = entry.pinyinKey,
+                consumedCodeLength = 1,
+                consumedSyllables = 1,
+                score = scoreEntry(entry, isWholeSpan = false, candidateKind = ChineseCandidateKind.FALLBACK, consumedSyllables = 1, totalSyllables = 1) - index,
+                kind = ChineseCandidateKind.FALLBACK,
+            )
+        }
     }
 
-    fun lookupPrefixedCandidates(pinyinPrefix: String, limit: Int = PARTIAL_PREFIX_LIMIT): List<String> {
+    override fun lookupPrefixedCandidates(
+        pinyinPrefix: String,
+        consumedCodeLength: Int,
+        contextBefore: String,
+        limit: Int,
+    ): List<ChineseCandidate> {
         val db = database ?: return emptyList()
         if (pinyinPrefix.isBlank()) return emptyList()
-        val cacheKey = "prefixed|$limit|$pinyinPrefix"
+        val normalizedContext = normalizeContext(contextBefore)
+        val cacheKey = "prefixed|$limit|$normalizedContext|$pinyinPrefix"
         synchronized(queryCache) {
             queryCache[cacheKey]?.let { cached ->
-                return cached.map { it.text }
+                return cached.mapIndexed { index, entry ->
+                    ChineseCandidate(
+                        text = entry.text,
+                        pinyinKey = entry.pinyinKey,
+                        consumedCodeLength = consumedCodeLength,
+                        consumedSyllables = entry.syllableCount,
+                        score = scoreEntry(
+                            entry,
+                            isWholeSpan = true,
+                            candidateKind = classifyExactCandidate(entry, entry.syllableCount),
+                            consumedSyllables = entry.syllableCount,
+                            totalSyllables = entry.syllableCount,
+                        ) - index,
+                        kind = classifyExactCandidate(entry, entry.syllableCount),
+                    )
+                }
             }
         }
 
@@ -223,41 +328,55 @@ class ChineseLexiconStore(
         val rows = mutableListOf<LexiconEntry>()
         db.rawQuery(
             """
-            SELECT text, MAX(base_freq) AS base_freq, MAX(syllable_count) AS syllable_count, MAX(user_score) AS user_score
+            SELECT pinyin_key, text, MAX(base_freq) AS base_freq, MAX(syllable_count) AS syllable_count, MAX(user_score) AS user_score, MAX(context_score) AS context_score
             FROM (
                 SELECT
+                    l.pinyin_key AS pinyin_key,
                     l.text AS text,
                     l.freq AS base_freq,
                     l.syllable_count AS syllable_count,
-                    COALESCE(u.score, 0) AS user_score
+                    COALESCE(u.score, 0) AS user_score,
+                    COALESCE(uc.score, 0) AS context_score
                 FROM lexicon l
                 LEFT JOIN user_freq u
                     ON u.pinyin_key = l.pinyin_key
                    AND u.text = l.text
+                LEFT JOIN user_context_freq uc
+                    ON uc.context_before = ?
+                   AND uc.pinyin_key = l.pinyin_key
+                   AND uc.text = l.text
                 WHERE l.pinyin_key LIKE ?
 
                 UNION ALL
 
                 SELECT
+                    u.pinyin_key AS pinyin_key,
                     u.text AS text,
                     0 AS base_freq,
                     u.syllable_count AS syllable_count,
-                    u.score AS user_score
+                    u.score AS user_score,
+                    COALESCE(uc.score, 0) AS context_score
                 FROM user_freq u
+                LEFT JOIN user_context_freq uc
+                    ON uc.context_before = ?
+                   AND uc.pinyin_key = u.pinyin_key
+                   AND uc.text = u.text
                 WHERE u.pinyin_key LIKE ?
             )
-            GROUP BY text
-            ORDER BY (base_freq + user_score) DESC, syllable_count DESC, length(text) DESC, text ASC
+            GROUP BY pinyin_key, text
+            ORDER BY (base_freq + user_score + context_score) DESC, syllable_count DESC, length(text) DESC, text ASC
             LIMIT ?
             """.trimIndent(),
-            arrayOf(likePattern, likePattern, limit.toString()),
+            arrayOf(normalizedContext, likePattern, normalizedContext, likePattern, limit.toString()),
         ).use { cursor ->
             while (cursor.moveToNext()) {
                 rows += LexiconEntry(
-                    text = cursor.getString(0),
-                    baseFreq = cursor.getInt(1),
-                    syllableCount = cursor.getInt(2),
-                    userScore = cursor.getInt(3),
+                    pinyinKey = cursor.getString(0),
+                    text = cursor.getString(1),
+                    baseFreq = cursor.getInt(2),
+                    syllableCount = cursor.getInt(3),
+                    userScore = cursor.getInt(4),
+                    contextScore = cursor.getInt(5),
                 )
             }
         }
@@ -265,10 +384,24 @@ class ChineseLexiconStore(
         synchronized(queryCache) {
             queryCache[cacheKey] = rows
         }
-        return rows.map { it.text }
+        return rows.mapIndexed { index, entry ->
+            val kind = classifyExactCandidate(entry, entry.syllableCount)
+            ChineseCandidate(
+                text = entry.text,
+                pinyinKey = entry.pinyinKey,
+                consumedCodeLength = consumedCodeLength,
+                consumedSyllables = entry.syllableCount,
+                score = scoreEntry(entry, isWholeSpan = true, candidateKind = kind, consumedSyllables = entry.syllableCount, totalSyllables = entry.syllableCount) - index,
+                kind = kind,
+            )
+        }
     }
 
-    private fun buildBestPaths(syllables: List<String>): List<CandidatePath> {
+    private fun buildBestPaths(
+        syllables: List<String>,
+        contextBefore: String,
+        totalSyllables: Int,
+    ): List<CandidatePath> {
         val pathCache = Array(syllables.size + 1) { emptyList<CandidatePath>() }
         pathCache[syllables.size] = listOf(CandidatePath("", 0, 0))
 
@@ -277,7 +410,7 @@ class ChineseLexiconStore(
             val maxEnd = min(syllables.size, start + MAX_SPAN_SYLLABLES)
             for (end in (start + 1)..maxEnd) {
                 val key = syllables.subList(start, end).joinToString("'")
-                val spanEntries = queryEntries(key, SPAN_QUERY_LIMIT)
+                val spanEntries = queryEntries(key, SPAN_QUERY_LIMIT, contextBefore)
                 if (spanEntries.isEmpty()) continue
 
                 val endsSentence = end == syllables.size
@@ -289,6 +422,8 @@ class ChineseLexiconStore(
                                 entry,
                                 isWholeSpan = start == 0,
                                 candidateKind = ChineseCandidateKind.SENTENCE,
+                                consumedSyllables = syllables.size,
+                                totalSyllables = totalSyllables,
                             ),
                             segmentCount = 1,
                         )
@@ -307,6 +442,8 @@ class ChineseLexiconStore(
                         } else {
                             ChineseCandidateKind.PHRASE
                         },
+                        consumedSyllables = syllables.size,
+                        totalSyllables = totalSyllables,
                     )
                     suffixes.take(SPAN_QUERY_LIMIT).forEach { suffix ->
                         candidates += CandidatePath(
@@ -337,9 +474,13 @@ class ChineseLexiconStore(
         entry: LexiconEntry,
         isWholeSpan: Boolean,
         candidateKind: ChineseCandidateKind,
+        consumedSyllables: Int,
+        totalSyllables: Int,
     ): Int {
-        val lexicalScore = entry.baseFreq + entry.userScore
+        val lexicalScore = entry.baseFreq + entry.userScore + (entry.contextScore * 2)
         val structureBonus = entry.syllableCount * 72 + entry.text.length * 12
+        val coverageBonus = consumedSyllables * 96
+        val remainderPenalty = (totalSyllables - consumedSyllables) * 112
         val candidateKindBonus = when (candidateKind) {
             ChineseCandidateKind.SENTENCE -> 160
             ChineseCandidateKind.PHRASE -> 96
@@ -347,7 +488,7 @@ class ChineseLexiconStore(
             ChineseCandidateKind.NONE -> 0
         }
         val exactBonus = if (isWholeSpan) 96 else 0
-        return lexicalScore + structureBonus + candidateKindBonus + exactBonus
+        return lexicalScore + structureBonus + coverageBonus + candidateKindBonus + exactBonus - remainderPenalty
     }
 
     private fun classifyExactCandidate(entry: LexiconEntry, syllableCount: Int): ChineseCandidateKind {
@@ -367,9 +508,10 @@ class ChineseLexiconStore(
         }
     }
 
-    private fun queryEntries(pinyinKey: String, limit: Int): List<LexiconEntry> {
+    private fun queryEntries(pinyinKey: String, limit: Int, contextBefore: String): List<LexiconEntry> {
         val db = database ?: return emptyList()
-        val cacheKey = "$limit|$pinyinKey"
+        val normalizedContext = normalizeContext(contextBefore)
+        val cacheKey = "$limit|$normalizedContext|$pinyinKey"
         synchronized(queryCache) {
             queryCache[cacheKey]?.let { return it }
         }
@@ -377,27 +519,39 @@ class ChineseLexiconStore(
         val rows = mutableListOf<LexiconEntry>()
         db.rawQuery(
             """
-            SELECT text, base_freq, syllable_count, user_score
+            SELECT pinyin_key, text, base_freq, syllable_count, user_score, context_score
             FROM (
                 SELECT
+                    l.pinyin_key AS pinyin_key,
                     l.text AS text,
                     l.freq AS base_freq,
                     l.syllable_count AS syllable_count,
-                    COALESCE(u.score, 0) AS user_score
+                    COALESCE(u.score, 0) AS user_score,
+                    COALESCE(uc.score, 0) AS context_score
                 FROM lexicon l
                 LEFT JOIN user_freq u
                     ON u.pinyin_key = l.pinyin_key
                    AND u.text = l.text
+                LEFT JOIN user_context_freq uc
+                    ON uc.context_before = ?
+                   AND uc.pinyin_key = l.pinyin_key
+                   AND uc.text = l.text
                 WHERE l.pinyin_key = ?
 
                 UNION ALL
 
                 SELECT
+                    u.pinyin_key AS pinyin_key,
                     u.text AS text,
                     0 AS base_freq,
                     u.syllable_count AS syllable_count,
-                    u.score AS user_score
+                    u.score AS user_score,
+                    COALESCE(uc.score, 0) AS context_score
                 FROM user_freq u
+                LEFT JOIN user_context_freq uc
+                    ON uc.context_before = ?
+                   AND uc.pinyin_key = u.pinyin_key
+                   AND uc.text = u.text
                 WHERE u.pinyin_key = ?
                   AND NOT EXISTS (
                     SELECT 1
@@ -406,17 +560,19 @@ class ChineseLexiconStore(
                       AND l.text = u.text
                   )
             )
-            ORDER BY (base_freq + user_score) DESC, syllable_count DESC, length(text) DESC, text ASC
+            ORDER BY (base_freq + user_score + context_score) DESC, syllable_count DESC, length(text) DESC, text ASC
             LIMIT ?
             """.trimIndent(),
-            arrayOf(pinyinKey, pinyinKey, limit.toString()),
+            arrayOf(normalizedContext, pinyinKey, normalizedContext, pinyinKey, limit.toString()),
         ).use { cursor ->
             while (cursor.moveToNext()) {
                 rows += LexiconEntry(
-                    text = cursor.getString(0),
-                    baseFreq = cursor.getInt(1),
-                    syllableCount = cursor.getInt(2),
-                    userScore = cursor.getInt(3),
+                    pinyinKey = cursor.getString(0),
+                    text = cursor.getString(1),
+                    baseFreq = cursor.getInt(2),
+                    syllableCount = cursor.getInt(3),
+                    userScore = cursor.getInt(4),
+                    contextScore = cursor.getInt(5),
                 )
             }
         }
@@ -436,6 +592,13 @@ class ChineseLexiconStore(
                 }
             }
         }
+    }
+
+    private fun normalizeContext(contextBefore: String): String {
+        return contextBefore
+            .takeLast(6)
+            .replace(Regex("\\s+"), " ")
+            .trim()
     }
 
     private fun openDatabase(): SQLiteDatabase {
@@ -460,6 +623,19 @@ class ChineseLexiconStore(
                 """.trimIndent(),
             )
             db.execSQL("CREATE INDEX IF NOT EXISTS idx_user_freq_pinyin ON user_freq(pinyin_key)")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS user_context_freq (
+                    context_before TEXT NOT NULL,
+                    pinyin_key TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    score INTEGER NOT NULL DEFAULT 0,
+                    updated_at INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (context_before, pinyin_key, text)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_user_context_freq_lookup ON user_context_freq(context_before, pinyin_key)")
             db.execSQL("PRAGMA user_version = $DB_VERSION")
         }
     }
@@ -515,35 +691,77 @@ class ChineseLexiconStore(
                 """.trimIndent(),
             )
             newDb.execSQL("CREATE INDEX IF NOT EXISTS idx_user_freq_pinyin ON user_freq(pinyin_key)")
+            newDb.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS user_context_freq (
+                    context_before TEXT NOT NULL,
+                    pinyin_key TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    score INTEGER NOT NULL DEFAULT 0,
+                    updated_at INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (context_before, pinyin_key, text)
+                )
+                """.trimIndent(),
+            )
+            newDb.execSQL("CREATE INDEX IF NOT EXISTS idx_user_context_freq_lookup ON user_context_freq(context_before, pinyin_key)")
 
             val oldDb = SQLiteDatabase.openDatabase(oldDbFile.path, null, SQLiteDatabase.OPEN_READONLY)
             try {
-                if (!hasTable(oldDb, "user_freq")) return
-                oldDb.rawQuery(
-                    """
-                    SELECT pinyin_key, text, syllable_count, score, updated_at
-                    FROM user_freq
-                    """.trimIndent(),
-                    null,
-                ).use { cursor ->
-                    while (cursor.moveToNext()) {
-                        newDb.execSQL(
-                            """
-                            INSERT INTO user_freq(pinyin_key, text, syllable_count, score, updated_at)
-                            VALUES (?, ?, ?, ?, ?)
-                            ON CONFLICT(pinyin_key, text) DO UPDATE SET
-                                syllable_count = excluded.syllable_count,
-                                score = MAX(user_freq.score, excluded.score),
-                                updated_at = MAX(user_freq.updated_at, excluded.updated_at)
-                            """.trimIndent(),
-                            arrayOf(
-                                cursor.getString(0),
-                                cursor.getString(1),
-                                cursor.getInt(2),
-                                cursor.getInt(3),
-                                cursor.getLong(4),
-                            ),
-                        )
+                if (hasTable(oldDb, "user_freq")) {
+                    oldDb.rawQuery(
+                        """
+                        SELECT pinyin_key, text, syllable_count, score, updated_at
+                        FROM user_freq
+                        """.trimIndent(),
+                        null,
+                    ).use { cursor ->
+                        while (cursor.moveToNext()) {
+                            newDb.execSQL(
+                                """
+                                INSERT INTO user_freq(pinyin_key, text, syllable_count, score, updated_at)
+                                VALUES (?, ?, ?, ?, ?)
+                                ON CONFLICT(pinyin_key, text) DO UPDATE SET
+                                    syllable_count = excluded.syllable_count,
+                                    score = MAX(user_freq.score, excluded.score),
+                                    updated_at = MAX(user_freq.updated_at, excluded.updated_at)
+                                """.trimIndent(),
+                                arrayOf(
+                                    cursor.getString(0),
+                                    cursor.getString(1),
+                                    cursor.getInt(2),
+                                    cursor.getInt(3),
+                                    cursor.getLong(4),
+                                ),
+                            )
+                        }
+                    }
+                }
+                if (hasTable(oldDb, "user_context_freq")) {
+                    oldDb.rawQuery(
+                        """
+                        SELECT context_before, pinyin_key, text, score, updated_at
+                        FROM user_context_freq
+                        """.trimIndent(),
+                        null,
+                    ).use { cursor ->
+                        while (cursor.moveToNext()) {
+                            newDb.execSQL(
+                                """
+                                INSERT INTO user_context_freq(context_before, pinyin_key, text, score, updated_at)
+                                VALUES (?, ?, ?, ?, ?)
+                                ON CONFLICT(context_before, pinyin_key, text) DO UPDATE SET
+                                    score = MAX(user_context_freq.score, excluded.score),
+                                    updated_at = MAX(user_context_freq.updated_at, excluded.updated_at)
+                                """.trimIndent(),
+                                arrayOf(
+                                    cursor.getString(0),
+                                    cursor.getString(1),
+                                    cursor.getString(2),
+                                    cursor.getInt(3),
+                                    cursor.getLong(4),
+                                ),
+                            )
+                        }
                     }
                 }
             } finally {

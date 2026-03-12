@@ -351,6 +351,7 @@ class TermKeyIMEService : InputMethodService() {
     private lateinit var macroScrollView: HorizontalScrollView
     private lateinit var macroContainer: LinearLayout
     private lateinit var macroSeparator: View
+    private lateinit var candidateRawCodeView: TextView
     private lateinit var candidateScrollView: HorizontalScrollView
     private lateinit var candidateContainer: LinearLayout
     private lateinit var fnRow: LinearLayout
@@ -362,6 +363,7 @@ class TermKeyIMEService : InputMethodService() {
     // ── Prefs ────────────────────────────────────────────────────────────────
     private val prefs by lazy { PreferenceManager.getDefaultSharedPreferences(this) }
     private val chineseEngine by lazy { NaturalShuangpinEngine(ChineseLexiconStore(applicationContext)) }
+    private var latestChineseState: ChineseInputState? = null
     private var chineseMode = false
     private var layoutMode = KeyboardLayoutMode.COMPACT_EN
     private var previousCompactLayoutMode = KeyboardLayoutMode.COMPACT_EN
@@ -405,6 +407,7 @@ class TermKeyIMEService : InputMethodService() {
         macroScrollView = rootView.findViewById(R.id.macro_scroll)
         macroContainer = rootView.findViewById(R.id.macro_container)
         macroSeparator = rootView.findViewById(R.id.macro_separator)
+        candidateRawCodeView = rootView.findViewById(R.id.candidate_raw_code)
         candidateScrollView = rootView.findViewById(R.id.candidate_scroll)
         candidateContainer = rootView.findViewById(R.id.candidate_container)
         fnRow = rootView.findViewById(R.id.fn_row)
@@ -854,7 +857,7 @@ class TermKeyIMEService : InputMethodService() {
 
     private fun sendEnter() {
         if (chineseMode && chineseEngine.hasPending()) {
-            val state = chineseEngine.currentState()
+            val state = chineseEngine.currentState(currentChineseContextBefore())
             if (state.hasPendingTail) {
                 commitRawChineseCode()
             } else {
@@ -884,7 +887,7 @@ class TermKeyIMEService : InputMethodService() {
 
     private fun performBackspace() {
         if (chineseMode && chineseEngine.hasPending()) {
-            updateChineseState(chineseEngine.backspace())
+            updateChineseState(chineseEngine.backspace(currentChineseContextBefore()))
             return
         }
         val ic = currentInputConnection ?: return
@@ -904,7 +907,7 @@ class TermKeyIMEService : InputMethodService() {
 
     private fun performForwardDelete() {
         if (chineseMode && chineseEngine.hasPending()) {
-            updateChineseState(chineseEngine.backspace())
+            updateChineseState(chineseEngine.backspace(currentChineseContextBefore()))
             return
         }
         val ic = currentInputConnection ?: return
@@ -920,7 +923,7 @@ class TermKeyIMEService : InputMethodService() {
         if (chineseMode && chineseEngine.hasPending()) {
             feedbackVibrate()
             feedbackSound()
-            val state = chineseEngine.currentState()
+            val state = chineseEngine.currentState(currentChineseContextBefore())
             if (state.canCommitOnSpace) {
                 commitChineseSelection(state.primaryCandidate)
             } else {
@@ -943,8 +946,8 @@ class TermKeyIMEService : InputMethodService() {
     }
 
     private fun commitRawChineseCode() {
-        val rawCode = chineseEngine.currentState().rawCode
-        chineseEngine.clear()
+        val rawCode = chineseEngine.currentState(currentChineseContextBefore()).rawCode
+        chineseEngine.clear(currentChineseContextBefore())
         currentInputConnection?.apply {
             finishComposingText()
             if (rawCode.isNotBlank()) {
@@ -1183,7 +1186,7 @@ class TermKeyIMEService : InputMethodService() {
 
     private fun performEnterWithoutFeedback() {
         if (chineseMode && chineseEngine.hasPending()) {
-            val state = chineseEngine.currentState()
+            val state = chineseEngine.currentState(currentChineseContextBefore())
             if (state.hasPendingTail) {
                 commitRawChineseCode()
             } else {
@@ -1274,7 +1277,7 @@ class TermKeyIMEService : InputMethodService() {
         }
         val isLetter = primary in 'a'..'z'
         if (chineseMode && isLetter && !ctrlActive && !altActive) {
-            updateChineseState(chineseEngine.append(primary))
+            updateChineseState(chineseEngine.append(primary, currentChineseContextBefore()))
             return
         }
 
@@ -1344,25 +1347,48 @@ class TermKeyIMEService : InputMethodService() {
         return if (chineseMode) KeyboardLayoutMode.COMPACT_ZH else KeyboardLayoutMode.COMPACT_EN
     }
 
+    private fun currentChineseContextBefore(): String {
+        return currentInputConnection
+            ?.getTextBeforeCursor(16, 0)
+            ?.toString()
+            .orEmpty()
+    }
+
     private fun updateChineseState(state: ChineseInputState) {
+        latestChineseState = state
         val ic = currentInputConnection
         if (state.rawCode.isEmpty()) {
             ic?.finishComposingText()
         } else if (state.primaryCandidate != null) {
-            ic?.setComposingText(state.primaryCandidate, 1)
+            ic?.setComposingText(state.primaryCandidate.text, 1)
         } else if (state.previewText.isNotEmpty()) {
             ic?.setComposingText(state.previewText, 1)
         }
+        updateCandidateRawCode(state)
         rebuildCandidateBar(state.candidates)
         updateKeyboardLayoutUi()
     }
 
-    private fun rebuildCandidateBar(candidates: List<String>) {
+    private fun updateCandidateRawCode(state: ChineseInputState) {
+        if (!::candidateRawCodeView.isInitialized) return
+        candidateRawCodeView.text = state.groupedRawCode
+        candidateRawCodeView.visibility = if (
+            chineseMode &&
+            layoutMode != KeyboardLayoutMode.COMPACT_SYMBOL &&
+            state.groupedRawCode.isNotBlank()
+        ) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+    }
+
+    private fun rebuildCandidateBar(candidates: List<ChineseCandidate>) {
         if (!::candidateContainer.isInitialized) return
         candidateContainer.removeAllViews()
         candidates.forEachIndexed { index, candidate ->
             val candidateView = layoutInflater.inflate(R.layout.macro_button, candidateContainer, false) as TextView
-            candidateView.text = candidate
+            candidateView.text = candidate.text
             candidateView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             candidateView.setTextColor(
                 ContextCompat.getColor(
@@ -1380,29 +1406,45 @@ class TermKeyIMEService : InputMethodService() {
         candidateScrollView.visibility = if (chineseMode && candidates.isNotEmpty()) View.VISIBLE else View.GONE
     }
 
-    private fun commitChineseSelection(candidate: String? = null) {
+    private fun commitChineseSelection(candidate: ChineseCandidate? = null) {
         if (!chineseEngine.hasPending()) {
+            latestChineseState = null
+            candidateRawCodeView.visibility = View.GONE
             candidateScrollView.visibility = View.GONE
             return
         }
 
-        val state = chineseEngine.currentState()
-        val resolved = candidate
+        val contextBefore = currentChineseContextBefore()
+        val state = chineseEngine.currentState(contextBefore)
+        val resolvedCandidate = candidate
             ?: state.primaryCandidate
+        val resolvedText = resolvedCandidate?.text
             ?: state.previewText.takeIf { it.isNotBlank() }
 
         currentInputConnection?.apply {
-            if (!resolved.isNullOrBlank()) {
-                commitText(resolved, 1)
-                chineseEngine.recordSelection(state, resolved)
+            if (!resolvedText.isNullOrBlank()) {
+                commitText(resolvedText, 1)
+                if (resolvedCandidate != null) {
+                    chineseEngine.recordSelection(state, resolvedCandidate, contextBefore)
+                    chineseEngine.consumeCandidate(resolvedCandidate)
+                } else {
+                    chineseEngine.clear(currentChineseContextBefore())
+                }
             } else {
                 finishComposingText()
             }
         }
 
-        chineseEngine.clear()
-        rebuildCandidateBar(emptyList())
-        updateKeyboardLayoutUi()
+        val nextState = chineseEngine.currentState(currentChineseContextBefore())
+        if (nextState.rawCode.isEmpty()) {
+            latestChineseState = nextState
+            updateCandidateRawCode(nextState)
+            rebuildCandidateBar(emptyList())
+            currentInputConnection?.finishComposingText()
+            updateKeyboardLayoutUi()
+        } else {
+            updateChineseState(nextState)
+        }
     }
 
     private fun clearChineseInput(commitCurrent: Boolean) {
@@ -1410,10 +1452,12 @@ class TermKeyIMEService : InputMethodService() {
             commitChineseSelection()
         } else {
             val hadPending = chineseEngine.hasPending()
-            chineseEngine.clear()
+            val clearedState = chineseEngine.clear(currentChineseContextBefore())
+            latestChineseState = clearedState
             if (hadPending) {
                 currentInputConnection?.finishComposingText()
             }
+            updateCandidateRawCode(clearedState)
             rebuildCandidateBar(emptyList())
             updateKeyboardLayoutUi()
         }
@@ -1481,6 +1525,15 @@ class TermKeyIMEService : InputMethodService() {
             candidateScrollView.visibility = View.VISIBLE
         } else {
             candidateScrollView.visibility = View.GONE
+        }
+        candidateRawCodeView.visibility = if (
+            chineseMode &&
+            layoutMode != KeyboardLayoutMode.COMPACT_SYMBOL &&
+            latestChineseState?.groupedRawCode?.isNotBlank() == true
+        ) {
+            View.VISIBLE
+        } else {
+            View.GONE
         }
         updateVoiceKeyUI()
         scheduleAdaptiveTouchTargetsUpdate()

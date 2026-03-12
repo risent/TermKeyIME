@@ -33,6 +33,20 @@
         android:layout_height="1dp"
         android:background="@color/terminal_border" />
 
+    <TextView
+        android:id="@+id/candidate_raw_code"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:background="@color/terminal_surface2"
+        android:fontFamily="monospace"
+        android:paddingStart="10dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="2dp"
+        android:textColor="@color/terminal_text_dim"
+        android:textSize="13sp" />
+
     <!-- Chinese candidate bar -->
     <HorizontalScrollView
         android:id="@+id/candidate_scroll"
