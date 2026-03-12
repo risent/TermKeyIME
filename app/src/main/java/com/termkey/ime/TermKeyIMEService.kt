@@ -69,6 +69,7 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_equals,
             R.id.key_backspace,
             R.id.key_tab,
+            R.id.key_lbracket,
             R.id.key_q,
             R.id.key_w,
             R.id.key_e,
@@ -79,10 +80,10 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_i,
             R.id.key_o,
             R.id.key_p,
-            R.id.key_lbracket,
             R.id.key_rbracket,
             R.id.key_backslash,
             R.id.key_ctrl,
+            R.id.key_semicolon,
             R.id.key_a,
             R.id.key_s,
             R.id.key_d,
@@ -92,11 +93,11 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_j,
             R.id.key_k,
             R.id.key_l,
-            R.id.key_semicolon,
             R.id.key_quote,
             R.id.key_enter,
             R.id.key_esc,
             R.id.key_alt,
+            R.id.key_comma,
             R.id.key_z,
             R.id.key_x,
             R.id.key_c,
@@ -104,7 +105,6 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_b,
             R.id.key_n,
             R.id.key_m,
-            R.id.key_comma,
             R.id.key_period,
             R.id.key_slash,
             R.id.key_arrow_up,
@@ -493,6 +493,7 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_0 to "0",
             R.id.key_minus to "-",
             R.id.key_equals to "=",
+            R.id.key_lbracket to "[",
             R.id.key_q to "Q",
             R.id.key_w to "W",
             R.id.key_e to "E",
@@ -503,9 +504,9 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_i to "I",
             R.id.key_o to "O",
             R.id.key_p to "P",
-            R.id.key_lbracket to "[",
             R.id.key_rbracket to "]",
             R.id.key_backslash to "\\",
+            R.id.key_semicolon to ";",
             R.id.key_a to "A",
             R.id.key_s to "S",
             R.id.key_d to "D",
@@ -515,8 +516,8 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_j to "J",
             R.id.key_k to "K",
             R.id.key_l to "L",
-            R.id.key_semicolon to ";",
             R.id.key_quote to "'",
+            R.id.key_comma to ",",
             R.id.key_z to "Z",
             R.id.key_x to "X",
             R.id.key_c to "C",
@@ -524,7 +525,6 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_b to "B",
             R.id.key_n to "N",
             R.id.key_m to "M",
-            R.id.key_comma to ",",
             R.id.key_period to ".",
             R.id.key_slash to "/",
         )
@@ -669,6 +669,7 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_0      to Pair('0', ')'),
             R.id.key_minus  to Pair('-', '_'),
             R.id.key_equals to Pair('=', '+'),
+            R.id.key_lbracket to Pair('[', '{'),
             R.id.key_q      to Pair('q', 'Q'),
             R.id.key_w      to Pair('w', 'W'),
             R.id.key_e      to Pair('e', 'E'),
@@ -679,9 +680,9 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_i      to Pair('i', 'I'),
             R.id.key_o      to Pair('o', 'O'),
             R.id.key_p      to Pair('p', 'P'),
-            R.id.key_lbracket to Pair('[', '{'),
             R.id.key_rbracket to Pair(']', '}'),
             R.id.key_backslash to Pair('\\', '|'),
+            R.id.key_semicolon to Pair(';', ':'),
             R.id.key_a      to Pair('a', 'A'),
             R.id.key_s      to Pair('s', 'S'),
             R.id.key_d      to Pair('d', 'D'),
@@ -691,8 +692,8 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_j      to Pair('j', 'J'),
             R.id.key_k      to Pair('k', 'K'),
             R.id.key_l      to Pair('l', 'L'),
-            R.id.key_semicolon to Pair(';', ':'),
             R.id.key_quote  to Pair('\'', '"'),
+            R.id.key_comma to Pair(',', '<'),
             R.id.key_z      to Pair('z', 'Z'),
             R.id.key_x      to Pair('x', 'X'),
             R.id.key_c      to Pair('c', 'C'),
@@ -700,7 +701,6 @@ class TermKeyIMEService : InputMethodService() {
             R.id.key_b      to Pair('b', 'B'),
             R.id.key_n      to Pair('n', 'N'),
             R.id.key_m      to Pair('m', 'M'),
-            R.id.key_comma  to Pair(',', '<'),
             R.id.key_period to Pair('.', '>'),
             R.id.key_slash  to Pair('/', '?'),
         )
@@ -854,7 +854,13 @@ class TermKeyIMEService : InputMethodService() {
 
     private fun sendEnter() {
         if (chineseMode && chineseEngine.hasPending()) {
-            commitChineseSelection()
+            val state = chineseEngine.currentState()
+            if (state.hasPendingTail) {
+                commitRawChineseCode()
+            } else {
+                commitChineseSelection()
+            }
+            return
         }
         feedbackVibrate()
         feedbackSound()
@@ -934,6 +940,19 @@ class TermKeyIMEService : InputMethodService() {
         } else {
             ic.commitText(" ", 1)
         }
+    }
+
+    private fun commitRawChineseCode() {
+        val rawCode = chineseEngine.currentState().rawCode
+        chineseEngine.clear()
+        currentInputConnection?.apply {
+            finishComposingText()
+            if (rawCode.isNotBlank()) {
+                commitText(rawCode, 1)
+            }
+        }
+        rebuildCandidateBar(emptyList())
+        updateKeyboardLayoutUi()
     }
 
     private fun sendKeyCode(keyCode: Int) {
@@ -1164,7 +1183,13 @@ class TermKeyIMEService : InputMethodService() {
 
     private fun performEnterWithoutFeedback() {
         if (chineseMode && chineseEngine.hasPending()) {
-            commitChineseSelection()
+            val state = chineseEngine.currentState()
+            if (state.hasPendingTail) {
+                commitRawChineseCode()
+            } else {
+                commitChineseSelection()
+            }
+            return
         }
         val ic = currentInputConnection ?: return
         if (ctrlActive) {
@@ -1414,12 +1439,16 @@ class TermKeyIMEService : InputMethodService() {
         languageKey.text = getString(if (chineseMode) R.string.key_lang_zh else R.string.key_lang_en)
         applyKeyboardRowHeights()
         applyDynamicKeyLabels()
+        applyDynamicKeyTextSizes()
         applyDynamicKeyWeights()
         when (layoutMode) {
             KeyboardLayoutMode.FULL -> {
                 ALL_KEY_IDS.forEach { keyId ->
                     rootView.findViewById<View>(keyId)?.visibility = View.VISIBLE
                 }
+                rootView.findViewById<View>(R.id.key_lbracket)?.visibility = View.GONE
+                rootView.findViewById<View>(R.id.key_semicolon)?.visibility = View.GONE
+                rootView.findViewById<View>(R.id.key_comma)?.visibility = View.GONE
                 macroScrollView.visibility = if (showMacro) View.VISIBLE else View.GONE
                 macroSeparator.visibility = if (showMacro) View.VISIBLE else View.GONE
                 fnRow.visibility = if (showFn) View.VISIBLE else View.GONE
@@ -1623,6 +1652,78 @@ class TermKeyIMEService : InputMethodService() {
         updateKeyWeight(R.id.key_alt, if (layoutMode == KeyboardLayoutMode.FULL) 1.3f else 1.0f)
         updateKeyWeight(R.id.key_end, if (layoutMode == KeyboardLayoutMode.FULL) 1.1f else 1.0f)
         updateKeyWeight(R.id.key_delete, if (layoutMode == KeyboardLayoutMode.FULL) 1.1f else 1.0f)
+        updateKeyWeight(R.id.key_space, if (layoutMode == KeyboardLayoutMode.FULL) 2.94f else 4.2f)
+    }
+
+    private fun applyDynamicKeyTextSizes() {
+        val compactMode = layoutMode != KeyboardLayoutMode.FULL
+        val baseSize = if (compactMode) 15f else 13f
+        val wideSize = if (compactMode) 18f else 16f
+        val utilitySize = if (compactMode) 12.5f else 10f
+        val modifierSize = if (compactMode) 13f else 11f
+        val enterSize = if (compactMode) 13.5f else 11f
+        val arrowSize = if (compactMode) 18f else 16f
+
+        val baseKeys = intArrayOf(
+            R.id.key_grave,
+            R.id.key_1,
+            R.id.key_2,
+            R.id.key_3,
+            R.id.key_4,
+            R.id.key_5,
+            R.id.key_6,
+            R.id.key_7,
+            R.id.key_8,
+            R.id.key_9,
+            R.id.key_0,
+            R.id.key_minus,
+            R.id.key_equals,
+            R.id.key_lbracket,
+            R.id.key_q,
+            R.id.key_w,
+            R.id.key_e,
+            R.id.key_r,
+            R.id.key_t,
+            R.id.key_y,
+            R.id.key_u,
+            R.id.key_i,
+            R.id.key_o,
+            R.id.key_p,
+            R.id.key_rbracket,
+            R.id.key_backslash,
+            R.id.key_semicolon,
+            R.id.key_a,
+            R.id.key_s,
+            R.id.key_d,
+            R.id.key_f_key,
+            R.id.key_g,
+            R.id.key_h,
+            R.id.key_j,
+            R.id.key_k,
+            R.id.key_l,
+            R.id.key_quote,
+            R.id.key_comma,
+            R.id.key_z,
+            R.id.key_x,
+            R.id.key_c,
+            R.id.key_v,
+            R.id.key_b,
+            R.id.key_n,
+            R.id.key_m,
+            R.id.key_period,
+            R.id.key_slash,
+        )
+        baseKeys.forEach { setKeyTextSize(it, baseSize) }
+
+        intArrayOf(R.id.key_backspace).forEach { setKeyTextSize(it, wideSize) }
+        intArrayOf(R.id.key_tab, R.id.key_space, R.id.key_page_up, R.id.key_page_down, R.id.key_home, R.id.key_end, R.id.key_delete, R.id.key_mic, R.id.key_shift, R.id.key_lang).forEach {
+            setKeyTextSize(it, utilitySize)
+        }
+        intArrayOf(R.id.key_ctrl, R.id.key_alt, R.id.key_esc).forEach { setKeyTextSize(it, modifierSize) }
+        intArrayOf(R.id.key_enter).forEach { setKeyTextSize(it, enterSize) }
+        intArrayOf(R.id.key_arrow_up, R.id.key_arrow_down, R.id.key_arrow_left, R.id.key_arrow_right).forEach {
+            setKeyTextSize(it, arrowSize)
+        }
     }
 
     private fun applyKeyboardRowHeights() {
@@ -1662,6 +1763,10 @@ class TermKeyIMEService : InputMethodService() {
         if (params.weight == weight) return
         params.weight = weight
         view.layoutParams = params
+    }
+
+    private fun setKeyTextSize(viewId: Int, textSizeSp: Float) {
+        rootView.findViewById<TextView>(viewId)?.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSizeSp)
     }
 
     private fun toggleVoiceInput() {

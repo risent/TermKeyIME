@@ -181,11 +181,17 @@ class NaturalShuangpinEngine(
                 else -> null
             }
             "w" -> when (finalToken) {
+                "a" -> "wa"
+                "ai" -> "wai"
                 "u" -> "wu"
                 "ua" -> "wa"
                 "uai" -> "wai"
+                "an" -> "wan"
+                "ang" -> "wang"
+                "en" -> "wen"
                 "uan" -> "wan"
                 "uang" -> "wang"
+                "ei" -> "wei"
                 "ui" -> "wei"
                 "un" -> "wen"
                 "uo", "o" -> "wo"
