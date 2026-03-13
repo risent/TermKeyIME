@@ -273,8 +273,14 @@ class NaturalShuangpinEngine(
 
         val lexiconCandidates = lexiconStore?.lookupCandidates(syllables, contextBefore)?.candidates.orEmpty()
         val fallbackCandidates = fallbackCandidatesForSyllables(syllables)
+        val preferredTexts = preferredPhraseTextsForSyllables(syllables)
         return ChineseCandidateQueryResult(
-            mergeCandidates(lexiconCandidates, fallbackCandidates, limit = if (syllables.size == 1) 32 else 9),
+            mergeCandidates(
+                primary = lexiconCandidates,
+                secondary = fallbackCandidates,
+                limit = if (syllables.size == 1) 32 else 9,
+                preferredTexts = preferredTexts,
+            ),
         )
     }
 
@@ -358,11 +364,9 @@ class NaturalShuangpinEngine(
             .mapIndexed { index, text ->
                 val explicitCandidate = text in explicit
                 val baseScore = when {
-                    // Keep curated phrase entries ahead of noisy lexicon matches so
-                    // the default Space commit is stable for common regression cases.
-                    explicitCandidate && syllables.size >= 3 -> 52_000
-                    explicitCandidate && syllables.size >= 2 -> 51_000
-                    explicitCandidate -> 50_000
+                    explicitCandidate && syllables.size >= 3 -> 1180
+                    explicitCandidate && syllables.size >= 2 -> 1080
+                    explicitCandidate -> 260
                     syllables.size >= 3 -> 240
                     syllables.size >= 2 -> 180
                     else -> 90
@@ -378,10 +382,20 @@ class NaturalShuangpinEngine(
             }
     }
 
+    private fun preferredPhraseTextsForSyllables(syllables: List<String>): Set<String> {
+        if (syllables.size < 2) return emptySet()
+        return phraseCandidates[syllables.joinToString("'")]
+            .orEmpty()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toSet()
+    }
+
     private fun mergeCandidates(
         primary: List<ChineseCandidate>,
         secondary: List<ChineseCandidate>,
         limit: Int,
+        preferredTexts: Set<String> = emptySet(),
     ): List<ChineseCandidate> {
         return preferConsumedLengthLadder(
             (primary + secondary)
@@ -389,7 +403,8 @@ class NaturalShuangpinEngine(
             .values
             .mapNotNull { group -> group.maxByOrNull { it.score } }
             .sortedWith(
-                compareByDescending<ChineseCandidate> { it.score }
+                compareByDescending<ChineseCandidate> { it.text in preferredTexts }
+                    .thenByDescending { it.score }
                     .thenByDescending { it.consumedCodeLength }
                     .thenByDescending { it.kind == ChineseCandidateKind.SENTENCE }
                     .thenByDescending { it.kind == ChineseCandidateKind.PHRASE }
