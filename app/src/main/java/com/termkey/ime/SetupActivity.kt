@@ -15,6 +15,7 @@ class SetupActivity : AppCompatActivity() {
     private lateinit var btnEnable: Button
     private lateinit var btnSwitch: Button
     private lateinit var btnSettings: Button
+    private lateinit var btnTestPage: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -24,6 +25,7 @@ class SetupActivity : AppCompatActivity() {
         btnEnable = findViewById(R.id.btn_enable_ime)
         btnSwitch = findViewById(R.id.btn_switch_ime)
         btnSettings = findViewById(R.id.btn_open_settings)
+        btnTestPage = findViewById(R.id.btn_open_test_page)
 
         btnEnable.setOnClickListener {
             startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
@@ -35,6 +37,10 @@ class SetupActivity : AppCompatActivity() {
 
         btnSettings.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
+        }
+
+        btnTestPage.setOnClickListener {
+            startActivity(Intent(this, InputTestActivity::class.java))
         }
     }
 

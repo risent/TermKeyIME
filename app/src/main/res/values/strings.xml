@@ -4,6 +4,12 @@
     <string name="ime_name">TermKey – Linux Terminal Keyboard</string>
     <string name="subtype_normal">English (US)</string>
     <string name="settings_title">TermKey Settings</string>
+    <string name="input_test_title">Input Test</string>
+    <string name="input_test_hint">Use this page to verify Chinese Shuangpin, macros, voice input, delete gestures, and LLM tools on a real text field.</string>
+    <string name="input_test_editor_hint">Tap here and start typing with TermKey…</string>
+    <string name="input_test_refocus">Focus Editor</string>
+    <string name="input_test_switch_ime">Switch IME</string>
+    <string name="input_test_cases">Suggested checks: rawCode/candidate persistence, swipe-up clear, long-press delete haptics, polish options, voice preview, and macro insertion.</string>
 
     <!-- Setup screen -->
     <string name="setup_title">TermKey Setup</string>
@@ -12,12 +18,14 @@
     <string name="setup_btn_enable">Open Keyboard Settings</string>
     <string name="setup_btn_switch">Switch to TermKey</string>
     <string name="setup_btn_settings">Open TermKey Settings</string>
+    <string name="setup_btn_test_page">Open Input Test Page</string>
     <string name="setup_done">TermKey is active! You can now use it in any app.</string>
 
     <!-- Settings -->
     <string name="pref_category_appearance">Appearance</string>
     <string name="pref_category_behavior">Behavior</string>
     <string name="pref_category_voice">Voice Input</string>
+    <string name="pref_category_llm">LLM Tools</string>
     <string name="pref_category_macros">Macro Bar</string>
     <string name="pref_show_fn_row">Show F1–F12 row</string>
     <string name="pref_show_fn_row_summary">Display function key row at top of keyboard</string>
@@ -45,6 +53,14 @@
     <string name="pref_voice_resource_id_summary">Resource identifier such as volc.seedasr.sauc.concurrent</string>
     <string name="pref_voice_language">Language</string>
     <string name="pref_voice_language_summary">Recognition language, for example zh-CN or en-US</string>
+    <string name="pref_show_llm_tools">Enable LLM text tools</string>
+    <string name="pref_show_llm_tools_summary">Show AI tool chips when text is selected or available before the cursor</string>
+    <string name="pref_llm_base_url">OpenAI-compatible Base URL</string>
+    <string name="pref_llm_base_url_summary">API base such as https://api.openai.com/v1</string>
+    <string name="pref_llm_api_key">API Key</string>
+    <string name="pref_llm_api_key_summary">Bearer token used for LLM requests</string>
+    <string name="pref_llm_model">Model</string>
+    <string name="pref_llm_model_summary">Model name exposed by the configured provider</string>
     <string name="pref_edit_macros">Edit macros</string>
     <string name="pref_edit_macros_summary">Customize the quick-insert macro bar</string>
     <string name="pref_reset_macros">Reset macros to defaults</string>
@@ -71,6 +87,18 @@
     <string name="voice_listening">Voice input started.</string>
     <string name="voice_stopping">Stopping voice input…</string>
     <string name="voice_error_prefix">Voice input failed:</string>
+    <string name="delete_clear_release_hint">Release to clear</string>
+    <string name="llm_missing_config">Configure LLM Base URL, API key, and model first.</string>
+    <string name="llm_loading">Generating…</string>
+    <string name="llm_panel_title">LLM Tool</string>
+    <string name="llm_source_label">Source</string>
+    <string name="llm_result_label">Result</string>
+    <string name="llm_replace">Replace</string>
+    <string name="llm_retry">Retry</string>
+    <string name="llm_cancel">Cancel</string>
+    <string name="llm_invalidated">Editor content changed. Retry to refresh the result.</string>
+    <string name="llm_empty_result">The model returned an empty result.</string>
+    <string name="llm_no_source">Select text or place the cursor after text first.</string>
     <string name="pref_value_not_set">Not set</string>
     <string name="pref_value_configured">Configured</string>
 

@@ -358,9 +358,11 @@ class NaturalShuangpinEngine(
             .mapIndexed { index, text ->
                 val explicitCandidate = text in explicit
                 val baseScore = when {
-                    explicitCandidate && syllables.size >= 3 -> 1180
-                    explicitCandidate && syllables.size >= 2 -> 1080
-                    explicitCandidate -> 260
+                    // Keep curated phrase entries ahead of noisy lexicon matches so
+                    // the default Space commit is stable for common regression cases.
+                    explicitCandidate && syllables.size >= 3 -> 52_000
+                    explicitCandidate && syllables.size >= 2 -> 51_000
+                    explicitCandidate -> 50_000
                     syllables.size >= 3 -> 240
                     syllables.size >= 2 -> 180
                     else -> 90

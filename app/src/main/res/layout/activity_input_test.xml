@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/terminal_bg">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/input_test_title"
+            android:textColor="@color/terminal_green"
+            android:textSize="24sp"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="6dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/input_test_hint"
+            android:textColor="@color/terminal_text_dim"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="18dp" />
+
+        <EditText
+            android:id="@+id/test_input_field"
+            android:layout_width="match_parent"
+            android:layout_height="220dp"
+            android:background="@color/terminal_surface"
+            android:gravity="top|start"
+            android:hint="@string/input_test_editor_hint"
+            android:inputType="textMultiLine|textCapSentences"
+            android:minLines="8"
+            android:padding="14dp"
+            android:textColor="@color/terminal_text"
+            android:textColorHint="@color/terminal_text_dim"
+            android:textSize="16sp"
+            android:fontFamily="monospace" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="18dp">
+
+            <Button
+                android:id="@+id/btn_refocus_input"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="6dp"
+                android:text="@string/input_test_refocus"
+                android:textColor="@color/terminal_green" />
+
+            <Button
+                android:id="@+id/btn_show_ime_picker"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:text="@string/input_test_switch_ime"
+                android:textColor="@color/terminal_green" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="@string/input_test_cases"
+            android:textColor="@color/terminal_amber"
+            android:textSize="13sp"
+            android:fontFamily="monospace" />
+    </LinearLayout>
+</ScrollView>

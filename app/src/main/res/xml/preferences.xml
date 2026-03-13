@@ -76,6 +76,27 @@
             android:defaultValue="zh-CN" />
     </PreferenceCategory>
 
+    <PreferenceCategory android:title="@string/pref_category_llm">
+        <SwitchPreferenceCompat
+            android:key="llm_enabled"
+            android:title="@string/pref_show_llm_tools"
+            android:summary="@string/pref_show_llm_tools_summary"
+            android:defaultValue="false" />
+        <EditTextPreference
+            android:key="llm_base_url"
+            android:title="@string/pref_llm_base_url"
+            android:summary="@string/pref_llm_base_url_summary"
+            android:defaultValue="https://api.openai.com/v1" />
+        <EditTextPreference
+            android:key="llm_api_key"
+            android:title="@string/pref_llm_api_key"
+            android:summary="@string/pref_llm_api_key_summary" />
+        <EditTextPreference
+            android:key="llm_model"
+            android:title="@string/pref_llm_model"
+            android:summary="@string/pref_llm_model_summary" />
+    </PreferenceCategory>
+
     <PreferenceCategory android:title="@string/pref_category_macros">
         <Preference
             android:key="edit_macros"

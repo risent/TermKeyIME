@@ -35,6 +35,11 @@
             android:exported="false"
             android:label="@string/macro_editor_title" />
 
+        <activity
+            android:name=".InputTestActivity"
+            android:exported="true"
+            android:label="@string/input_test_title" />
+
         <!-- The Input Method Service -->
         <service
             android:name=".TermKeyIMEService"

@@ -71,6 +71,15 @@ Android terminal keyboard with compact Chinese/English layouts, Natural Shuangpi
 
 If Gradle fails with `Unsupported class file major version 69`, switch back to JDK 17 before building.
 
+## Testing
+
+- Manual regression guide: [`TESTING.md`](TESTING.md)
+- Emulator Shuangpin smoke test:
+
+```bash
+make emulator-shuangpin-test
+```
+
 ## Setup
 
 1. Install the debug build.
