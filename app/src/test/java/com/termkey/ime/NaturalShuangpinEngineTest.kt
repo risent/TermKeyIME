@@ -9,6 +9,50 @@ import org.junit.Test
 class NaturalShuangpinEngineTest {
 
     @Test
+    fun commonPhraseSamplesStayTopCandidateForFullCode() {
+        val engine = NaturalShuangpinEngine()
+
+        val expectations = listOf(
+            "nihk" to "你好",
+            "vsgo" to "中国",
+            "uurufa" to "输入法",
+            "udpn" to "双拼",
+            "vege" to "这个",
+            "ufme" to "什么",
+            "vsdr" to "终端",
+            "ceui" to "测试",
+        )
+
+        expectations.forEach { (code, expected) ->
+            val state = code.fold(engine.clear()) { _, ch -> engine.append(ch) }
+            assertEquals("unexpected primary candidate for $code", expected, state.primaryCandidate?.text)
+            assertTrue("space should commit full-code phrase for $code", state.canCommitOnSpace)
+            engine.clear()
+        }
+    }
+
+    @Test
+    fun curatedCommonPhraseBeatsHigherScoredLexiconMatchForSamePinyin() {
+        val source = FakeLexiconDataSource().apply {
+            candidateMap["zhong'guo"] = listOf(
+                candidate("中过", "zhong'guo", 4, 2, 50_000, ChineseCandidateKind.PHRASE),
+                candidate("中国", "zhong'guo", 4, 2, 10_000, ChineseCandidateKind.PHRASE),
+            )
+            candidateMap["shen'me"] = listOf(
+                candidate("神么", "shen'me", 4, 2, 60_000, ChineseCandidateKind.PHRASE),
+                candidate("什么", "shen'me", 4, 2, 9_000, ChineseCandidateKind.PHRASE),
+            )
+        }
+        val engine = NaturalShuangpinEngine(source)
+
+        val china = "vsgo".fold(engine.clear()) { _, ch -> engine.append(ch) }
+        assertEquals("中国", china.primaryCandidate?.text)
+
+        val what = "ufme".fold(engine.clear()) { _, ch -> engine.append(ch) }
+        assertEquals("什么", what.primaryCandidate?.text)
+    }
+
+    @Test
     fun wSeriesCodesDecodeToCandidates() {
         val source = FakeLexiconDataSource().apply {
             candidateMap["wang"] = listOf(candidate("网", "wang", 2, 1, 420))

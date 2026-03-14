@@ -273,8 +273,14 @@ class NaturalShuangpinEngine(
 
         val lexiconCandidates = lexiconStore?.lookupCandidates(syllables, contextBefore)?.candidates.orEmpty()
         val fallbackCandidates = fallbackCandidatesForSyllables(syllables)
+        val preferredTexts = preferredPhraseTextsForSyllables(syllables)
         return ChineseCandidateQueryResult(
-            mergeCandidates(lexiconCandidates, fallbackCandidates, limit = if (syllables.size == 1) 32 else 9),
+            mergeCandidates(
+                primary = lexiconCandidates,
+                secondary = fallbackCandidates,
+                limit = if (syllables.size == 1) 32 else 9,
+                preferredTexts = preferredTexts,
+            ),
         )
     }
 
@@ -376,10 +382,20 @@ class NaturalShuangpinEngine(
             }
     }
 
+    private fun preferredPhraseTextsForSyllables(syllables: List<String>): Set<String> {
+        if (syllables.size < 2) return emptySet()
+        return phraseCandidates[syllables.joinToString("'")]
+            .orEmpty()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toSet()
+    }
+
     private fun mergeCandidates(
         primary: List<ChineseCandidate>,
         secondary: List<ChineseCandidate>,
         limit: Int,
+        preferredTexts: Set<String> = emptySet(),
     ): List<ChineseCandidate> {
         return preferConsumedLengthLadder(
             (primary + secondary)
@@ -387,7 +403,8 @@ class NaturalShuangpinEngine(
             .values
             .mapNotNull { group -> group.maxByOrNull { it.score } }
             .sortedWith(
-                compareByDescending<ChineseCandidate> { it.score }
+                compareByDescending<ChineseCandidate> { it.text in preferredTexts }
+                    .thenByDescending { it.score }
                     .thenByDescending { it.consumedCodeLength }
                     .thenByDescending { it.kind == ChineseCandidateKind.SENTENCE }
                     .thenByDescending { it.kind == ChineseCandidateKind.PHRASE }

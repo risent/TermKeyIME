@@ -345,6 +345,16 @@ class TermKeyIMEService : InputMethodService() {
     private lateinit var keyRows: List<LinearLayout>
     private lateinit var languageKey: TextView
     private lateinit var voiceKey: TextView
+    private lateinit var llmPanel: View
+    private lateinit var llmPanelTitle: TextView
+    private lateinit var llmPanelStatus: TextView
+    private lateinit var llmPanelSource: TextView
+    private lateinit var llmOptionScroll: HorizontalScrollView
+    private lateinit var llmOptionContainer: LinearLayout
+    private lateinit var llmPanelResult: TextView
+    private lateinit var llmActionReplace: TextView
+    private lateinit var llmActionRetry: TextView
+    private lateinit var llmActionCancel: TextView
     private lateinit var adaptiveTouchDelegate: AdaptiveTouchDelegateGroup
 
     // ── Prefs ────────────────────────────────────────────────────────────────
@@ -361,6 +371,8 @@ class TermKeyIMEService : InputMethodService() {
     private var voicePreviewText = ""
     private var voicePreviewUsesComposing = false
     private var voiceBlinkAnimation: AlphaAnimation? = null
+    private var llmClient: OpenAiCompatLlmClient? = null
+    private var llmPreviewState: LlmPreviewState? = null
     private val repeatHandler = Handler(Looper.getMainLooper())
     private val adaptiveTouchRefreshRunnable = Runnable { rebuildAdaptiveTouchTargets() }
 
@@ -407,11 +419,22 @@ class TermKeyIMEService : InputMethodService() {
         )
         languageKey = rootView.findViewById(R.id.key_lang)
         voiceKey = rootView.findViewById(R.id.key_mic)
+        llmPanel = rootView.findViewById(R.id.llm_panel)
+        llmPanelTitle = rootView.findViewById(R.id.llm_panel_title)
+        llmPanelStatus = rootView.findViewById(R.id.llm_panel_status)
+        llmPanelSource = rootView.findViewById(R.id.llm_panel_source)
+        llmOptionScroll = rootView.findViewById(R.id.llm_option_scroll)
+        llmOptionContainer = rootView.findViewById(R.id.llm_option_container)
+        llmPanelResult = rootView.findViewById(R.id.llm_panel_result)
+        llmActionReplace = rootView.findViewById(R.id.llm_action_replace)
+        llmActionRetry = rootView.findViewById(R.id.llm_action_retry)
+        llmActionCancel = rootView.findViewById(R.id.llm_action_cancel)
 
         initializeKeyLabels()
         applyPreferences()
         buildMacroBar()
         wireKeys()
+        wireLlmPanel()
         adaptiveTouchDelegate = AdaptiveTouchDelegateGroup(rootView)
         rootView.touchDelegate = adaptiveTouchDelegate
         scheduleAdaptiveTouchTargetsUpdate()
@@ -424,28 +447,57 @@ class TermKeyIMEService : InputMethodService() {
         // Reset modifier state on each new input field
         resetModifiers()
         clearChineseInput(commitCurrent = false)
+        dismissLlmPanel(cancelRequest = true)
+        applyInputTestOverrides(info)
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
         super.onFinishInputView(finishingInput)
         stopDeleteRepeats()
         cancelVoiceInput()
+        dismissLlmPanel(cancelRequest = true)
         clearChineseInput(commitCurrent = false)
     }
 
     override fun onDestroy() {
         stopDeleteRepeats()
         cancelVoiceInput()
+        dismissLlmPanel(cancelRequest = true)
         clearChineseInput(commitCurrent = false)
         super.onDestroy()
+    }
+
+    override fun onUpdateSelection(
+        oldSelStart: Int,
+        oldSelEnd: Int,
+        newSelStart: Int,
+        newSelEnd: Int,
+        candidatesStart: Int,
+        candidatesEnd: Int,
+    ) {
+        super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
+        refreshLlmPreviewValidity()
+        refreshCandidateArea()
     }
 
     // ── Preferences ──────────────────────────────────────────────────────────
 
     private fun applyPreferences() {
+        refreshCandidateArea()
         updateKeyboardLayoutUi()
         updateVoiceKeyUI()
+        updateLlmPanelUi()
         scheduleAdaptiveTouchTargetsUpdate()
+    }
+
+    private fun applyInputTestOverrides(info: EditorInfo?) {
+        val isInputTestEditor = info?.packageName == packageName
+        if (!isInputTestEditor) return
+        if (!prefs.getBoolean(InputTestActivity.PREF_FORCE_CHINESE_FOR_INPUT_TEST, false)) return
+        chineseMode = true
+        layoutMode = KeyboardLayoutMode.COMPACT_ZH
+        clearChineseInput(commitCurrent = false)
+        updateKeyboardLayoutUi()
     }
 
     // ── Macro bar ─────────────────────────────────────────────────────────────
@@ -718,7 +770,7 @@ class TermKeyIMEService : InputMethodService() {
             // Swipe-up gesture for alternate
             if (prefs.getBoolean("swipe_for_symbols", true)) {
                 var startY = 0f
-                view.setOnTouchListener { v, event ->
+                view.setOnTouchListener { _, event ->
                     if (layoutMode == KeyboardLayoutMode.COMPACT_SYMBOL) {
                         return@setOnTouchListener false
                     }
@@ -1020,7 +1072,8 @@ class TermKeyIMEService : InputMethodService() {
         val swipeThresholdPx = 30f * resources.displayMetrics.density
         var startY = 0f
         var repeatStarted = false
-        var swipeTriggered = false
+        var swipeArmed = false
+        var swipeCanceled = false
         var repeatRunnable: Runnable? = null
         var compactPunctuationMode = false
 
@@ -1037,10 +1090,12 @@ class TermKeyIMEService : InputMethodService() {
                     feedbackSound()
                     startY = event.y
                     repeatStarted = false
-                    swipeTriggered = false
+                    swipeArmed = false
+                    swipeCanceled = false
                     repeatRunnable = object : Runnable {
                         override fun run() {
                             repeatStarted = true
+                            feedbackVibrate(8)
                             repeatAction()
                             repeatHandler.postDelayed(this, DELETE_REPEAT_INTERVAL_MS)
                         }
@@ -1053,10 +1108,15 @@ class TermKeyIMEService : InputMethodService() {
                     if (compactPunctuationMode) {
                         return@setOnTouchListener true
                     }
-                    if (!swipeTriggered && startY - event.y > swipeThresholdPx) {
-                        swipeTriggered = true
+                    val shouldArmClear = startY - event.y > swipeThresholdPx
+                    if (shouldArmClear && !swipeArmed) {
+                        swipeArmed = true
+                        swipeCanceled = false
                         repeatRunnable?.let(repeatHandler::removeCallbacks)
-                        clearAction()
+                        showToast(R.string.delete_clear_release_hint)
+                    } else if (!shouldArmClear && swipeArmed) {
+                        swipeArmed = false
+                        swipeCanceled = true
                     }
                     true
                 }
@@ -1067,9 +1127,11 @@ class TermKeyIMEService : InputMethodService() {
                         return@setOnTouchListener true
                     }
                     repeatRunnable?.let(repeatHandler::removeCallbacks)
-                    if (!swipeTriggered && startY - event.y > swipeThresholdPx) {
+                    if (swipeArmed) {
                         clearAction()
-                    } else if (!swipeTriggered && !repeatStarted) {
+                    } else if (swipeCanceled) {
+                        // Swiped up then back down: consume release without delete.
+                    } else if (!repeatStarted) {
                         repeatAction()
                     }
                     repeatRunnable = null
@@ -1078,6 +1140,8 @@ class TermKeyIMEService : InputMethodService() {
 
                 MotionEvent.ACTION_CANCEL -> {
                     compactPunctuationMode = false
+                    swipeArmed = false
+                    swipeCanceled = false
                     repeatRunnable?.let(repeatHandler::removeCallbacks)
                     repeatRunnable = null
                     true
@@ -1093,7 +1157,8 @@ class TermKeyIMEService : InputMethodService() {
         val swipeThresholdPx = 30f * resources.displayMetrics.density
         var startY = 0f
         var repeatStarted = false
-        var swipeTriggered = false
+        var swipeArmed = false
+        var swipeCanceled = false
         var repeatRunnable: Runnable? = null
 
         view.setOnTouchListener { _, event ->
@@ -1106,10 +1171,12 @@ class TermKeyIMEService : InputMethodService() {
                     feedbackSound()
                     startY = event.y
                     repeatStarted = false
-                    swipeTriggered = false
+                    swipeArmed = false
+                    swipeCanceled = false
                     repeatRunnable = object : Runnable {
                         override fun run() {
                             repeatStarted = true
+                            feedbackVibrate(8)
                             performBackspace()
                             repeatHandler.postDelayed(this, DELETE_REPEAT_INTERVAL_MS)
                         }
@@ -1119,19 +1186,26 @@ class TermKeyIMEService : InputMethodService() {
                 }
 
                 MotionEvent.ACTION_MOVE -> {
-                    if (!swipeTriggered && startY - event.y > swipeThresholdPx) {
-                        swipeTriggered = true
+                    val shouldArmClear = startY - event.y > swipeThresholdPx
+                    if (shouldArmClear && !swipeArmed) {
+                        swipeArmed = true
+                        swipeCanceled = false
                         repeatRunnable?.let(repeatHandler::removeCallbacks)
-                        clearAllBeforeCursor()
+                        showToast(R.string.delete_clear_release_hint)
+                    } else if (!shouldArmClear && swipeArmed) {
+                        swipeArmed = false
+                        swipeCanceled = true
                     }
                     true
                 }
 
                 MotionEvent.ACTION_UP -> {
                     repeatRunnable?.let(repeatHandler::removeCallbacks)
-                    if (!swipeTriggered && startY - event.y > swipeThresholdPx) {
+                    if (swipeArmed) {
                         clearAllBeforeCursor()
-                    } else if (!swipeTriggered && !repeatStarted) {
+                    } else if (swipeCanceled) {
+                        // Swiped up then back down: consume release without delete.
+                    } else if (!repeatStarted) {
                         performBackspace()
                     }
                     repeatRunnable = null
@@ -1139,6 +1213,8 @@ class TermKeyIMEService : InputMethodService() {
                 }
 
                 MotionEvent.ACTION_CANCEL -> {
+                    swipeArmed = false
+                    swipeCanceled = false
                     repeatRunnable?.let(repeatHandler::removeCallbacks)
                     repeatRunnable = null
                     true
@@ -1352,17 +1428,16 @@ class TermKeyIMEService : InputMethodService() {
             ic?.setComposingText(state.previewText, 1)
         }
         updateCandidateRawCode(state)
-        rebuildCandidateBar(state.candidates)
+        refreshCandidateArea()
         updateKeyboardLayoutUi()
     }
 
     private fun updateCandidateRawCode(state: ChineseInputState) {
         if (!::candidateRawCodeView.isInitialized) return
-        candidateRawCodeView.text = state.groupedRawCode
+        candidateRawCodeView.text = state.groupedRawCode.ifBlank { " " }
         candidateRawCodeView.visibility = if (
             chineseMode &&
-            layoutMode != KeyboardLayoutMode.COMPACT_SYMBOL &&
-            state.groupedRawCode.isNotBlank()
+            layoutMode != KeyboardLayoutMode.COMPACT_SYMBOL
         ) {
             View.VISIBLE
         } else {
@@ -1390,14 +1465,61 @@ class TermKeyIMEService : InputMethodService() {
             }
             candidateContainer.addView(candidateView)
         }
-        candidateScrollView.visibility = if (chineseMode && candidates.isNotEmpty()) View.VISIBLE else View.GONE
+        candidateScrollView.visibility = if (candidates.isNotEmpty()) View.VISIBLE else View.GONE
+    }
+
+    private fun rebuildLlmToolBar() {
+        if (!::candidateContainer.isInitialized) return
+        candidateContainer.removeAllViews()
+        LlmTextTool.entries.forEach { tool ->
+            val toolView = layoutInflater.inflate(R.layout.macro_button, candidateContainer, false) as TextView
+            toolView.text = tool.title
+            toolView.setTextColor(ContextCompat.getColor(this, R.color.terminal_cyan))
+            toolView.setOnClickListener {
+                feedbackVibrate(18)
+                feedbackSound()
+                startLlmTool(tool)
+            }
+            candidateContainer.addView(toolView)
+        }
+        candidateScrollView.visibility = View.VISIBLE
+    }
+
+    private fun refreshCandidateArea() {
+        if (!::candidateScrollView.isInitialized) return
+        when {
+            chineseMode && layoutMode != KeyboardLayoutMode.COMPACT_SYMBOL -> {
+                val candidates = latestChineseState?.candidates.orEmpty()
+                if (candidates.isNotEmpty()) {
+                    rebuildCandidateBar(candidates)
+                } else {
+                    candidateContainer.removeAllViews()
+                    candidateScrollView.visibility = View.VISIBLE
+                }
+            }
+            shouldShowLlmToolBar() -> {
+                rebuildLlmToolBar()
+            }
+            else -> {
+                candidateContainer.removeAllViews()
+                candidateScrollView.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun shouldShowLlmToolBar(): Boolean {
+        if (!prefs.getBoolean("llm_enabled", false)) return false
+        if (buildLlmConfig() == null) return false
+        if (layoutMode == KeyboardLayoutMode.COMPACT_SYMBOL) return false
+        if (chineseMode && latestChineseState?.rawCode?.isNotBlank() == true) return false
+        return currentLlmSource() != null
     }
 
     private fun commitChineseSelection(candidate: ChineseCandidate? = null) {
         if (!chineseEngine.hasPending()) {
             latestChineseState = null
-            candidateRawCodeView.visibility = View.GONE
-            candidateScrollView.visibility = View.GONE
+            updateCandidateRawCode(chineseEngine.currentState(currentChineseContextBefore()))
+            refreshCandidateArea()
             return
         }
 
@@ -1426,7 +1548,7 @@ class TermKeyIMEService : InputMethodService() {
         if (nextState.rawCode.isEmpty()) {
             latestChineseState = nextState
             updateCandidateRawCode(nextState)
-            rebuildCandidateBar(emptyList())
+            refreshCandidateArea()
             currentInputConnection?.finishComposingText()
             updateKeyboardLayoutUi()
         } else {
@@ -1445,7 +1567,7 @@ class TermKeyIMEService : InputMethodService() {
                 currentInputConnection?.finishComposingText()
             }
             updateCandidateRawCode(clearedState)
-            rebuildCandidateBar(emptyList())
+            refreshCandidateArea()
             updateKeyboardLayoutUi()
         }
     }
@@ -1514,21 +1636,17 @@ class TermKeyIMEService : InputMethodService() {
             View.GONE
         }
 
-        if (chineseMode && layoutMode != KeyboardLayoutMode.COMPACT_SYMBOL) {
-            candidateScrollView.visibility = View.VISIBLE
-        } else {
-            candidateScrollView.visibility = View.GONE
-        }
         candidateRawCodeView.visibility = if (
             chineseMode &&
-            layoutMode != KeyboardLayoutMode.COMPACT_SYMBOL &&
-            latestChineseState?.groupedRawCode?.isNotBlank() == true
+            layoutMode != KeyboardLayoutMode.COMPACT_SYMBOL
         ) {
             View.VISIBLE
         } else {
             View.GONE
         }
+        refreshCandidateArea()
         updateVoiceKeyUI()
+        updateLlmPanelUi()
         scheduleAdaptiveTouchTargetsUpdate()
     }
 
@@ -1813,6 +1931,250 @@ class TermKeyIMEService : InputMethodService() {
 
     private fun setKeyTextSize(viewId: Int, textSizeSp: Float) {
         rootView.findViewById<TextView>(viewId)?.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSizeSp)
+    }
+
+    private fun wireLlmPanel() {
+        llmActionCancel.setOnClickListener {
+            feedbackVibrate(14)
+            dismissLlmPanel(cancelRequest = true)
+        }
+        llmActionRetry.setOnClickListener {
+            feedbackVibrate(14)
+            retryLlmRequest()
+        }
+        llmActionReplace.setOnClickListener {
+            feedbackVibrate(16)
+            applyLlmResult()
+        }
+    }
+
+    private fun startLlmTool(tool: LlmTextTool) {
+        if (chineseEngine.hasPending()) {
+            commitChineseSelection()
+        }
+
+        val source = currentLlmSource()
+        if (source == null) {
+            showToast(R.string.llm_no_source)
+            refreshCandidateArea()
+            return
+        }
+        val config = buildLlmConfig()
+        if (config == null) {
+            showToast(R.string.llm_missing_config)
+            refreshCandidateArea()
+            return
+        }
+
+        llmClient?.cancel()
+        val request = LlmToolRequest(tool, source)
+        llmPreviewState = LlmPreviewState(request = request, status = LlmPreviewStatus.LOADING)
+        updateLlmPanelUi()
+
+        llmClient = OpenAiCompatLlmClient(
+            config = config,
+            listener = object : OpenAiCompatLlmClient.Listener {
+                override fun onSuccess(texts: List<String>) {
+                    val current = llmPreviewState ?: return
+                    if (current.request != request) return
+                    val options = LlmToolSupport.extractResultOptions(request, texts)
+                    val valid = isCurrentLlmSourceStillValid(request.source)
+                    llmPreviewState = current.copy(
+                        status = if (valid) LlmPreviewStatus.SUCCESS else LlmPreviewStatus.INVALIDATED,
+                        resultOptions = options.ifEmpty { listOf(getString(R.string.llm_empty_result)) },
+                        selectedResultIndex = 0,
+                        errorMessage = "",
+                    )
+                    updateLlmPanelUi()
+                }
+
+                override fun onError(message: String) {
+                    val current = llmPreviewState ?: return
+                    if (current.request != request) return
+                    llmPreviewState = current.copy(
+                        status = LlmPreviewStatus.ERROR,
+                        errorMessage = message,
+                    )
+                    updateLlmPanelUi()
+                    showToast(message, Toast.LENGTH_LONG)
+                }
+            },
+        )
+        llmClient?.run(messages = LlmToolSupport.buildMessages(request))
+    }
+
+    private fun retryLlmRequest() {
+        val request = llmPreviewState?.request ?: return
+        startLlmTool(request.tool)
+    }
+
+    private fun applyLlmResult() {
+        val preview = llmPreviewState ?: return
+        if (preview.status != LlmPreviewStatus.SUCCESS) return
+        val result = preview.selectedResultText.trim()
+        if (result.isEmpty()) {
+            showToast(R.string.llm_empty_result)
+            return
+        }
+
+        val ic = currentInputConnection ?: return
+        if (!isCurrentLlmSourceStillValid(preview.request.source)) {
+            llmPreviewState = preview.copy(status = LlmPreviewStatus.INVALIDATED)
+            updateLlmPanelUi()
+            return
+        }
+
+        ic.beginBatchEdit()
+        try {
+            when (preview.request.source.kind) {
+                LlmToolSource.Kind.SELECTION -> {
+                    if (currentSelectedText()?.toString() != preview.request.source.rawText) {
+                        llmPreviewState = preview.copy(status = LlmPreviewStatus.INVALIDATED)
+                        updateLlmPanelUi()
+                        return
+                    }
+                    ic.commitText(result, 1)
+                }
+                LlmToolSource.Kind.BEFORE_CURSOR -> {
+                    val beforeCursor = currentBeforeCursorTextForLlm()?.toString().orEmpty()
+                    if (!beforeCursor.endsWith(preview.request.source.rawText)) {
+                        llmPreviewState = preview.copy(status = LlmPreviewStatus.INVALIDATED)
+                        updateLlmPanelUi()
+                        return
+                    }
+                    ic.deleteSurroundingText(preview.request.source.rawText.length, 0)
+                    ic.commitText(result, 1)
+                }
+            }
+        } finally {
+            ic.endBatchEdit()
+        }
+
+        dismissLlmPanel(cancelRequest = false)
+        refreshCandidateArea()
+    }
+
+    private fun dismissLlmPanel(cancelRequest: Boolean) {
+        if (cancelRequest) {
+            llmClient?.cancel()
+        }
+        llmClient = null
+        llmPreviewState = null
+        updateLlmPanelUi()
+        refreshCandidateArea()
+    }
+
+    private fun updateLlmPanelUi() {
+        if (!::llmPanel.isInitialized) return
+        val preview = llmPreviewState
+        if (preview == null) {
+            llmPanel.visibility = View.GONE
+            return
+        }
+
+        llmPanel.visibility = View.VISIBLE
+        llmPanelTitle.text = "${getString(R.string.llm_panel_title)} - ${preview.request.tool.title}"
+        llmPanelSource.text = preview.request.source.displayText
+        rebuildLlmOptionChips(preview)
+        llmPanelResult.text = when (preview.status) {
+            LlmPreviewStatus.SUCCESS,
+            LlmPreviewStatus.INVALIDATED -> preview.selectedResultText
+            LlmPreviewStatus.ERROR -> preview.errorMessage
+            else -> ""
+        }
+        llmPanelStatus.text = when (preview.status) {
+            LlmPreviewStatus.LOADING -> getString(R.string.llm_loading)
+            LlmPreviewStatus.ERROR -> preview.errorMessage
+            LlmPreviewStatus.INVALIDATED -> getString(R.string.llm_invalidated)
+            else -> ""
+        }
+
+        setActionEnabled(llmActionCancel, true)
+        setActionEnabled(llmActionRetry, preview.status == LlmPreviewStatus.ERROR || preview.status == LlmPreviewStatus.INVALIDATED)
+        setActionEnabled(llmActionReplace, preview.status == LlmPreviewStatus.SUCCESS)
+    }
+
+    private fun rebuildLlmOptionChips(preview: LlmPreviewState) {
+        if (!::llmOptionContainer.isInitialized) return
+        llmOptionContainer.removeAllViews()
+        val options = preview.resultOptions
+        if (preview.request.tool != LlmTextTool.POLISH || options.size <= 1) {
+            llmOptionScroll.visibility = View.GONE
+            return
+        }
+
+        options.forEachIndexed { index, _ ->
+            val optionView = layoutInflater.inflate(R.layout.macro_button, llmOptionContainer, false) as TextView
+            optionView.text = "选项${index + 1}"
+            optionView.setTextColor(
+                ContextCompat.getColor(
+                    this,
+                    if (preview.selectedResultIndex == index) R.color.terminal_green else R.color.terminal_text,
+                ),
+            )
+            optionView.setOnClickListener {
+                feedbackVibrate(12)
+                llmPreviewState = llmPreviewState?.copy(selectedResultIndex = index)
+                updateLlmPanelUi()
+            }
+            llmOptionContainer.addView(optionView)
+        }
+        llmOptionScroll.visibility = View.VISIBLE
+    }
+
+    private fun setActionEnabled(view: TextView, enabled: Boolean) {
+        view.isEnabled = enabled
+        view.isClickable = enabled
+        view.alpha = if (enabled) 1f else 0.42f
+    }
+
+    private fun refreshLlmPreviewValidity() {
+        val preview = llmPreviewState ?: return
+        if (preview.status == LlmPreviewStatus.LOADING || preview.status == LlmPreviewStatus.ERROR) return
+        val nextStatus = if (isCurrentLlmSourceStillValid(preview.request.source)) {
+            LlmPreviewStatus.SUCCESS
+        } else {
+            LlmPreviewStatus.INVALIDATED
+        }
+        if (nextStatus != preview.status) {
+            llmPreviewState = preview.copy(status = nextStatus)
+            updateLlmPanelUi()
+        }
+    }
+
+    private fun currentLlmSource(): LlmToolSource? {
+        return LlmToolSupport.resolveSource(
+            selectedText = currentSelectedText(),
+            beforeCursorText = currentBeforeCursorTextForLlm(),
+        )
+    }
+
+    private fun currentSelectedText(): CharSequence? = currentInputConnection?.getSelectedText(0)
+
+    private fun currentBeforeCursorTextForLlm(): CharSequence? {
+        return currentInputConnection?.getTextBeforeCursor(LlmToolSupport.MAX_SOURCE_CHARS, 0)
+    }
+
+    private fun isCurrentLlmSourceStillValid(source: LlmToolSource): Boolean {
+        return LlmToolSupport.isSourceStillValid(
+            source = source,
+            selectedText = currentSelectedText(),
+            beforeCursorText = currentBeforeCursorTextForLlm(),
+        )
+    }
+
+    private fun buildLlmConfig(): OpenAiCompatLlmClient.Config? {
+        val baseUrl = prefs.getString("llm_base_url", "https://api.openai.com/v1")?.trim().orEmpty()
+        val apiKey = prefs.getString("llm_api_key", null)?.trim().orEmpty()
+        val model = prefs.getString("llm_model", null)?.trim().orEmpty()
+        if (baseUrl.isBlank() || apiKey.isBlank() || model.isBlank()) {
+            return null
+        }
+        return OpenAiCompatLlmClient.Config(
+            baseUrl = baseUrl,
+            apiKey = apiKey,
+            model = model,
+        )
     }
 
     private fun toggleVoiceInput() {

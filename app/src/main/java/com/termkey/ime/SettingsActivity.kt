@@ -39,6 +39,7 @@ class SettingsActivity : AppCompatActivity() {
             setPreferencesFromResource(R.xml.preferences, rootKey)
 
             configureVoicePreferences()
+            configureLlmPreferences()
 
             findPreference<Preference>("edit_macros")?.setOnPreferenceClickListener {
                 startActivity(Intent(requireContext(), MacroEditorActivity::class.java))
@@ -121,6 +122,39 @@ class SettingsActivity : AppCompatActivity() {
             findPreference<EditTextPreference>("voice_language")?.apply {
                 summaryProvider = Preference.SummaryProvider<EditTextPreference> { pref ->
                     pref.text?.takeIf { it.isNotBlank() } ?: "zh-CN"
+                }
+                setOnBindEditTextListener { editText ->
+                    editText.setSingleLine(true)
+                }
+            }
+        }
+
+        private fun configureLlmPreferences() {
+            findPreference<EditTextPreference>("llm_base_url")?.apply {
+                summaryProvider = Preference.SummaryProvider<EditTextPreference> { pref ->
+                    pref.text?.takeIf { it.isNotBlank() } ?: getString(R.string.pref_value_not_set)
+                }
+                setOnBindEditTextListener { editText ->
+                    editText.setSingleLine(true)
+                }
+            }
+
+            findPreference<EditTextPreference>("llm_api_key")?.apply {
+                summaryProvider = Preference.SummaryProvider<EditTextPreference> { pref ->
+                    if (pref.text.isNullOrBlank()) {
+                        getString(R.string.pref_value_not_set)
+                    } else {
+                        getString(R.string.pref_value_configured)
+                    }
+                }
+                setOnBindEditTextListener { editText ->
+                    editText.setSingleLine(true)
+                }
+            }
+
+            findPreference<EditTextPreference>("llm_model")?.apply {
+                summaryProvider = Preference.SummaryProvider<EditTextPreference> { pref ->
+                    pref.text?.takeIf { it.isNotBlank() } ?: getString(R.string.pref_value_not_set)
                 }
                 setOnBindEditTextListener { editText ->
                     editText.setSingleLine(true)
