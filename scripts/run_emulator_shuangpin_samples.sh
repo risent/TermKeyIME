@@ -11,16 +11,15 @@ IME_ID="com.termkey.ime/.TermKeyIMEService"
 # Coordinates are tuned for the Pixel 3a API 34 emulator in portrait mode.
 EDITOR_X=540
 EDITOR_Y=950
-LANG_X=150
-LANG_Y=1980
+LANG_X=120
+LANG_Y=1940
 SPACE_X=580
 SPACE_Y=1980
 DELETE_PUNCT_X=820
 DELETE_PUNCT_Y=1980
-CLEAR_START_X=1000
-CLEAR_START_Y=1880
-CLEAR_END_X=1000
-CLEAR_END_Y=1760
+BACKSPACE_X=1000
+BACKSPACE_Y=1810
+CLEAR_BACKSPACE_TAPS=12
 
 SAMPLES=(
   "nihk:你好"
@@ -62,21 +61,64 @@ device_shell() {
   "${ADB_BIN}" -s "${ADB_SERIAL}" shell "$@"
 }
 
+dump_ui_xml() {
+  device_shell 'uiautomator dump /sdcard/emu_dump.xml >/dev/null 2>/dev/null; cat /sdcard/emu_dump.xml'
+}
+
+dismiss_blocking_dialogs() {
+  local attempts=3
+  local xml
+  while (( attempts > 0 )); do
+    xml="$(dump_ui_xml)"
+    if [[ "${xml}" == *"System UI isn't responding"* ]]; then
+      # Tap the center of the "Wait" button shown by the emulator ANR dialog.
+      device_shell input tap 540 1247 >/dev/null
+      sleep 1
+      attempts=$((attempts - 1))
+      continue
+    fi
+    return 0
+  done
+}
+
+wait_for_input_test_activity() {
+  local attempts=15
+  local xml
+  while (( attempts > 0 )); do
+    dismiss_blocking_dialogs
+    xml="$(dump_ui_xml)"
+    if [[ "${xml}" == *'resource-id="com.termkey.ime:id/test_input_field"'* ]]; then
+      return 0
+    fi
+    device_shell am start -n "${LAUNCH_COMPONENT}" >/dev/null
+    sleep 1
+    attempts=$((attempts - 1))
+  done
+  echo "InputTestActivity did not reach the foreground." >&2
+  exit 1
+}
+
 focus_editor() {
+  dismiss_blocking_dialogs
   device_shell input tap "${EDITOR_X}" "${EDITOR_Y}" >/dev/null
   sleep 0.2
 }
 
 dump_field_text() {
   local xml
-  xml="$(device_shell 'uiautomator dump /sdcard/emu_dump.xml >/dev/null; cat /sdcard/emu_dump.xml')"
+  xml="$(dump_ui_xml)"
   printf '%s\n' "${xml}" | sed -n 's/.*text="\([^"]*\)".*resource-id="com\.termkey\.ime:id\/test_input_field".*/\1/p'
 }
 
 clear_field() {
   focus_editor
-  device_shell input swipe "${CLEAR_START_X}" "${CLEAR_START_Y}" "${CLEAR_END_X}" "${CLEAR_END_Y}" 150 >/dev/null
-  sleep 0.2
+  local remaining="${CLEAR_BACKSPACE_TAPS}"
+  while (( remaining > 0 )); do
+    device_shell input tap "${BACKSPACE_X}" "${BACKSPACE_Y}" >/dev/null
+    sleep 0.05
+    remaining=$((remaining - 1))
+  done
+  sleep 0.15
 }
 
 tap_key() {
@@ -134,40 +176,9 @@ press_space() {
 }
 
 ensure_chinese_mode() {
-  local text
-  local attempts=5
-  while (( attempts > 0 )); do
-    focus_editor
-    sleep 0.3
-    clear_field
-    device_shell input tap "${DELETE_PUNCT_X}" "${DELETE_PUNCT_Y}" >/dev/null
-    sleep 0.2
-    text="$(dump_field_text)"
-    clear_field
-
-    if [[ "${text}" == "。" ]]; then
-      return 0
-    fi
-    if [[ "${text}" == "." ]]; then
-      device_shell input tap "${LANG_X}" "${LANG_Y}" >/dev/null
-      sleep 0.35
-      focus_editor
-      sleep 0.25
-      clear_field
-      device_shell input tap "${DELETE_PUNCT_X}" "${DELETE_PUNCT_Y}" >/dev/null
-      sleep 0.2
-      text="$(dump_field_text)"
-      clear_field
-      if [[ "${text}" == "。" ]]; then
-        return 0
-      fi
-    fi
-    attempts=$((attempts - 1))
-    sleep 0.5
-  done
-
-  echo "Failed to switch to Chinese mode; punctuation probe returned '${text}'." >&2
-  exit 1
+  focus_editor
+  sleep 0.3
+  clear_field
 }
 
 prepare_app() {
@@ -179,8 +190,9 @@ prepare_app() {
   if ! device_shell ime set "${IME_ID}" >/dev/null 2>&1; then
     device_shell settings put secure default_input_method "${IME_ID}" >/dev/null
   fi
-  device_shell am start -n "${LAUNCH_COMPONENT}" >/dev/null
-  sleep 2
+  device_shell am start -n "${LAUNCH_COMPONENT}" --ez force_chinese true >/dev/null
+  sleep 1
+  wait_for_input_test_activity
   focus_editor
   sleep 0.5
   ensure_chinese_mode

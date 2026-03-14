@@ -448,6 +448,7 @@ class TermKeyIMEService : InputMethodService() {
         resetModifiers()
         clearChineseInput(commitCurrent = false)
         dismissLlmPanel(cancelRequest = true)
+        applyInputTestOverrides(info)
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
@@ -487,6 +488,16 @@ class TermKeyIMEService : InputMethodService() {
         updateVoiceKeyUI()
         updateLlmPanelUi()
         scheduleAdaptiveTouchTargetsUpdate()
+    }
+
+    private fun applyInputTestOverrides(info: EditorInfo?) {
+        val isInputTestEditor = info?.packageName == packageName
+        if (!isInputTestEditor) return
+        if (!prefs.getBoolean(InputTestActivity.PREF_FORCE_CHINESE_FOR_INPUT_TEST, false)) return
+        chineseMode = true
+        layoutMode = KeyboardLayoutMode.COMPACT_ZH
+        clearChineseInput(commitCurrent = false)
+        updateKeyboardLayoutUi()
     }
 
     // ── Macro bar ─────────────────────────────────────────────────────────────
