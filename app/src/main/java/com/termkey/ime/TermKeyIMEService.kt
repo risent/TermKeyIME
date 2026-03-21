@@ -1344,7 +1344,19 @@ class TermKeyIMEService : InputMethodService() {
             return
         }
 
-        if (chineseMode && chineseEngine.hasPending() && !isLetter) {
+        val isDigit = primary in '1'..'9'
+        if (chineseMode && chineseEngine.hasPending() && isDigit && !ctrlActive && !altActive) {
+            val candidateIndex = primary - '1'
+            val candidates = latestChineseState?.candidates.orEmpty()
+            if (candidateIndex < candidates.size) {
+                feedbackVibrate(12)
+                feedbackSound()
+                commitChineseSelection(candidates[candidateIndex])
+                return
+            }
+        }
+
+        if (chineseMode && chineseEngine.hasPending() && !isLetter && !isDigit) {
             commitChineseSelection()
         }
 
@@ -1449,21 +1461,37 @@ class TermKeyIMEService : InputMethodService() {
         if (!::candidateContainer.isInitialized) return
         candidateContainer.removeAllViews()
         candidates.forEachIndexed { index, candidate ->
-            val candidateView = layoutInflater.inflate(R.layout.macro_button, candidateContainer, false) as TextView
-            candidateView.text = candidate.text
-            candidateView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            candidateView.setTextColor(
-                ContextCompat.getColor(
-                    this,
-                    if (index == 0) R.color.terminal_green else R.color.terminal_text,
-                ),
-            )
-            candidateView.setOnClickListener {
+            val itemView = layoutInflater.inflate(R.layout.candidate_item, candidateContainer, false)
+            val indexView = itemView.findViewById<TextView>(R.id.candidate_index)
+            val textView = itemView.findViewById<TextView>(R.id.candidate_text)
+            val pinyinView = itemView.findViewById<TextView>(R.id.candidate_pinyin)
+
+            indexView.text = "${index + 1}."
+            textView.text = candidate.text
+            pinyinView.text = candidate.pinyinKey
+
+            when {
+                index == 0 -> {
+                    textView.setTextColor(ContextCompat.getColor(this, R.color.terminal_green))
+                }
+                candidate.kind == ChineseCandidateKind.FALLBACK -> {
+                    textView.setTextColor(ContextCompat.getColor(this, R.color.terminal_text_dim))
+                }
+                else -> {
+                    textView.setTextColor(ContextCompat.getColor(this, R.color.terminal_text))
+                }
+            }
+
+            if (candidate.kind == ChineseCandidateKind.SENTENCE) {
+                textView.setTypeface(null, android.graphics.Typeface.BOLD)
+            }
+
+            itemView.setOnClickListener {
                 feedbackVibrate(15)
                 feedbackSound()
                 commitChineseSelection(candidate)
             }
-            candidateContainer.addView(candidateView)
+            candidateContainer.addView(itemView)
         }
         candidateScrollView.visibility = if (candidates.isNotEmpty()) View.VISIBLE else View.GONE
     }
@@ -1494,7 +1522,7 @@ class TermKeyIMEService : InputMethodService() {
                     rebuildCandidateBar(candidates)
                 } else {
                     candidateContainer.removeAllViews()
-                    candidateScrollView.visibility = View.VISIBLE
+                    candidateScrollView.visibility = View.GONE
                 }
             }
             shouldShowLlmToolBar() -> {
