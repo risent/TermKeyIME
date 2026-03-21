@@ -5,3 +5,4 @@
 /keystore/
 /keystore.properties
 .DS_Store
+.gstack/
