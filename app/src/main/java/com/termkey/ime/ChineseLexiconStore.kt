@@ -33,19 +33,19 @@ class ChineseLexiconStore(
     companion object {
         private const val TAG = "TermKeyLexicon"
         private const val DB_NAME = "chinese_lexicon.db"
-        private const val DB_VERSION = 3
-        private const val USER_SCORE_INCREMENT = 240
-        private const val CONTEXT_SCORE_INCREMENT = 320
+        private const val DB_VERSION = 4
+        private const val USER_SCORE_INCREMENT = 120
+        private const val CONTEXT_SCORE_INCREMENT = 160
         private const val MAX_SENTENCE_SYLLABLES = 8
         private const val MAX_SPAN_SYLLABLES = 6
-        private const val PATH_BEAM_WIDTH = 16
+        private const val PATH_BEAM_WIDTH = 24
         private const val JOIN_PENALTY = 32
         private const val EXACT_QUERY_LIMIT = 9
         private const val SINGLE_SYLLABLE_LIMIT = 32
         private const val INITIAL_PREFIX_LIMIT = 18
         private const val PARTIAL_PREFIX_LIMIT = 18
-        private const val SPAN_QUERY_LIMIT = 6
-        private const val CACHE_SIZE = 256
+        private const val SPAN_QUERY_LIMIT = 8
+        private const val CACHE_SIZE = 512
     }
 
     private val appContext = context.applicationContext
@@ -240,6 +240,7 @@ class ChineseLexiconStore(
                    AND uc.text = l.text
                 WHERE l.syllable_count = 1
                   AND length(l.text) = 1
+                  AND length(l.pinyin_key) <= 4
                   AND l.pinyin_key LIKE ?
 
                 UNION ALL
@@ -259,12 +260,26 @@ class ChineseLexiconStore(
                 WHERE u.syllable_count = 1
                   AND length(u.text) = 1
                   AND u.pinyin_key LIKE ?
+
+                UNION ALL
+
+                SELECT
+                    c.pinyin_key AS pinyin_key,
+                    c.text AS text,
+                    0 AS base_freq,
+                    c.syllable_count AS syllable_count,
+                    0 AS user_score,
+                    0 AS context_score
+                FROM user_custom_lexicon c
+                WHERE c.syllable_count = 1
+                  AND length(c.text) = 1
+                  AND c.pinyin_key LIKE ?
             )
             GROUP BY pinyin_key, text
             ORDER BY (base_freq + user_score + context_score) DESC, text ASC
             LIMIT ?
             """.trimIndent(),
-            arrayOf(normalizedContext, likePattern, normalizedContext, likePattern, limit.toString()),
+            arrayOf(normalizedContext, likePattern, normalizedContext, likePattern, likePattern, limit.toString()),
         ).use { cursor ->
             while (cursor.moveToNext()) {
                 rows += LexiconEntry(
@@ -362,12 +377,24 @@ class ChineseLexiconStore(
                    AND uc.pinyin_key = u.pinyin_key
                    AND uc.text = u.text
                 WHERE u.pinyin_key LIKE ?
+
+                UNION ALL
+
+                SELECT
+                    c.pinyin_key AS pinyin_key,
+                    c.text AS text,
+                    0 AS base_freq,
+                    c.syllable_count AS syllable_count,
+                    0 AS user_score,
+                    0 AS context_score
+                FROM user_custom_lexicon c
+                WHERE c.pinyin_key LIKE ?
             )
             GROUP BY pinyin_key, text
             ORDER BY (base_freq + user_score + context_score) DESC, syllable_count DESC, length(text) DESC, text ASC
             LIMIT ?
             """.trimIndent(),
-            arrayOf(normalizedContext, likePattern, normalizedContext, likePattern, limit.toString()),
+            arrayOf(normalizedContext, likePattern, normalizedContext, likePattern, likePattern, limit.toString()),
         ).use { cursor ->
             while (cursor.moveToNext()) {
                 rows += LexiconEntry(
@@ -477,7 +504,12 @@ class ChineseLexiconStore(
         consumedSyllables: Int,
         totalSyllables: Int,
     ): Int {
-        val lexicalScore = entry.baseFreq + entry.userScore + (entry.contextScore * 2)
+        val rawLexical = entry.baseFreq + entry.userScore + (entry.contextScore * 3)
+        val lexicalScore = if (rawLexical > 2000) {
+            (2000 + kotlin.math.ln((rawLexical - 1999).toDouble()) * 200).toInt()
+        } else {
+            rawLexical
+        }
         val structureBonus = entry.syllableCount * 72 + entry.text.length * 12
         val coverageBonus = consumedSyllables * 96
         val remainderPenalty = (totalSyllables - consumedSyllables) * 112
@@ -559,11 +591,29 @@ class ChineseLexiconStore(
                     WHERE l.pinyin_key = u.pinyin_key
                       AND l.text = u.text
                   )
+
+                UNION ALL
+
+                SELECT
+                    c.pinyin_key AS pinyin_key,
+                    c.text AS text,
+                    0 AS base_freq,
+                    c.syllable_count AS syllable_count,
+                    0 AS user_score,
+                    0 AS context_score
+                FROM user_custom_lexicon c
+                WHERE c.pinyin_key = ?
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM lexicon l
+                    WHERE l.pinyin_key = c.pinyin_key
+                      AND l.text = c.text
+                  )
             )
             ORDER BY (base_freq + user_score + context_score) DESC, syllable_count DESC, length(text) DESC, text ASC
             LIMIT ?
             """.trimIndent(),
-            arrayOf(normalizedContext, pinyinKey, normalizedContext, pinyinKey, limit.toString()),
+            arrayOf(normalizedContext, pinyinKey, normalizedContext, pinyinKey, pinyinKey, limit.toString()),
         ).use { cursor ->
             while (cursor.moveToNext()) {
                 rows += LexiconEntry(
@@ -636,6 +686,18 @@ class ChineseLexiconStore(
                 """.trimIndent(),
             )
             db.execSQL("CREATE INDEX IF NOT EXISTS idx_user_context_freq_lookup ON user_context_freq(context_before, pinyin_key)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_lexicon_covering ON lexicon(pinyin_key, text, freq, syllable_count)")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS user_custom_lexicon (
+                    pinyin_key TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    syllable_count INTEGER NOT NULL DEFAULT 1,
+                    PRIMARY KEY (pinyin_key, text)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_custom_lexicon_pinyin ON user_custom_lexicon(pinyin_key)")
             db.execSQL("PRAGMA user_version = $DB_VERSION")
         }
     }
@@ -783,6 +845,58 @@ class ChineseLexiconStore(
             arrayOf(tableName),
         ).use { cursor ->
             return cursor.moveToFirst()
+        }
+    }
+
+    fun importCustomDictionary(inputStream: java.io.InputStream): Int {
+        val db = database ?: return 0
+        var count = 0
+        db.beginTransaction()
+        try {
+            inputStream.bufferedReader(Charsets.UTF_8).useLines { lines ->
+                for (line in lines) {
+                    val trimmed = line.trim()
+                    if (trimmed.isEmpty() || trimmed.startsWith("#")) continue
+                    val parts = trimmed.split(Regex("\\s+"), limit = 2)
+                    if (parts.size < 2) continue
+                    val pinyinKey = parts[0].lowercase()
+                    val text = parts[1].trim()
+                    if (pinyinKey.isBlank() || text.isBlank()) continue
+                    val syllableCount = pinyinKey.count { it == '\'' } + 1
+                    db.execSQL(
+                        """
+                        INSERT OR REPLACE INTO user_custom_lexicon(pinyin_key, text, syllable_count)
+                        VALUES (?, ?, ?)
+                        """.trimIndent(),
+                        arrayOf(pinyinKey, text, syllableCount),
+                    )
+                    count++
+                }
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        invalidateAllCache()
+        return count
+    }
+
+    fun getCustomDictionaryCount(): Int {
+        val db = database ?: return 0
+        db.rawQuery("SELECT COUNT(*) FROM user_custom_lexicon", null).use { cursor ->
+            return if (cursor.moveToFirst()) cursor.getInt(0) else 0
+        }
+    }
+
+    fun clearCustomDictionary() {
+        val db = database ?: return
+        db.execSQL("DELETE FROM user_custom_lexicon")
+        invalidateAllCache()
+    }
+
+    private fun invalidateAllCache() {
+        synchronized(queryCache) {
+            queryCache.clear()
         }
     }
 }

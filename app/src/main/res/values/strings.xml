@@ -27,6 +27,14 @@
     <string name="pref_category_voice">Voice Input</string>
     <string name="pref_category_llm">LLM Tools</string>
     <string name="pref_category_macros">Macro Bar</string>
+    <string name="pref_category_chinese">Chinese Input</string>
+    <string name="pref_import_custom_dict">Import custom dictionary</string>
+    <string name="pref_import_custom_dict_summary">Load a text file with "pinyin word" pairs (one per line)</string>
+    <string name="pref_custom_dict_count">%d custom entries</string>
+    <string name="pref_clear_custom_dict">Clear custom dictionary</string>
+    <string name="custom_dict_imported">Imported %d entries.</string>
+    <string name="custom_dict_cleared">Custom dictionary cleared.</string>
+    <string name="custom_dict_import_failed">Import failed. Check file format.</string>
     <string name="pref_show_fn_row">Show F1–F12 row</string>
     <string name="pref_show_fn_row_summary">Display function key row at top of keyboard</string>
     <string name="pref_show_macro_bar">Show macro bar</string>
