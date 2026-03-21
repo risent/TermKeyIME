@@ -3,6 +3,7 @@ package com.termkey.ime
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -235,6 +236,392 @@ class NaturalShuangpinEngineTest {
         score = score,
         kind = kind,
     )
+
+    @Test
+    fun zeroInitialCodesDecodeCorrectly() {
+        val engine = NaturalShuangpinEngine(null)
+
+        engine.append('a')
+        assertEquals("a", engine.append('a').decodedPinyin)
+        engine.clear()
+        engine.append('a')
+        assertEquals("ai", engine.append('i').decodedPinyin)
+        engine.clear()
+        engine.append('a')
+        assertEquals("an", engine.append('n').decodedPinyin)
+        engine.clear()
+        engine.append('a')
+        assertEquals("ang", engine.append('h').decodedPinyin)
+        engine.clear()
+        engine.append('a')
+        assertEquals("ao", engine.append('o').decodedPinyin)
+        engine.clear()
+        engine.append('e')
+        assertEquals("e", engine.append('e').decodedPinyin)
+        engine.clear()
+        engine.append('e')
+        assertEquals("ei", engine.append('i').decodedPinyin)
+        engine.clear()
+        engine.append('e')
+        assertEquals("en", engine.append('n').decodedPinyin)
+        engine.clear()
+        engine.append('e')
+        assertEquals("eng", engine.append('g').decodedPinyin)
+        engine.clear()
+        engine.append('e')
+        assertEquals("er", engine.append('r').decodedPinyin)
+        engine.clear()
+        engine.append('o')
+        assertEquals("o", engine.append('o').decodedPinyin)
+        engine.clear()
+        engine.append('o')
+        assertEquals("ou", engine.append('u').decodedPinyin)
+    }
+
+    @Test
+    fun specialInitialMappingsDecodeCorrectly() {
+        val engine = NaturalShuangpinEngine(null)
+
+        engine.append('i')
+        assertEquals("chi", engine.append('i').decodedPinyin)
+        engine.clear()
+        engine.append('u')
+        assertEquals("shi", engine.append('i').decodedPinyin)
+        engine.clear()
+        engine.append('v')
+        assertEquals("zhi", engine.append('i').decodedPinyin)
+    }
+
+    @Test
+    fun standardInitialsWithFinalsDecodeCorrectly() {
+        val engine = NaturalShuangpinEngine(null)
+
+        engine.append('b')
+        assertEquals("ba", engine.append('a').decodedPinyin)
+        engine.clear()
+        engine.append('b')
+        assertEquals("bo", engine.append('o').decodedPinyin)
+        engine.clear()
+        engine.append('b')
+        assertEquals("bi", engine.append('i').decodedPinyin)
+        engine.clear()
+        engine.append('b')
+        assertEquals("bu", engine.append('u').decodedPinyin)
+        engine.clear()
+        engine.append('d')
+        assertEquals("da", engine.append('a').decodedPinyin)
+        engine.clear()
+        engine.append('d')
+        assertEquals("de", engine.append('e').decodedPinyin)
+        engine.clear()
+        engine.append('d')
+        assertEquals("di", engine.append('i').decodedPinyin)
+        engine.clear()
+        engine.append('d')
+        assertEquals("du", engine.append('u').decodedPinyin)
+        engine.clear()
+        engine.append('f')
+        assertEquals("fa", engine.append('a').decodedPinyin)
+        engine.clear()
+        engine.append('f')
+        assertEquals("fu", engine.append('u').decodedPinyin)
+        engine.clear()
+        engine.append('g')
+        assertEquals("ga", engine.append('a').decodedPinyin)
+        engine.clear()
+        engine.append('g')
+        assertEquals("ge", engine.append('e').decodedPinyin)
+        engine.clear()
+        engine.append('g')
+        assertEquals("gu", engine.append('u').decodedPinyin)
+        engine.clear()
+        engine.append('h')
+        assertEquals("ha", engine.append('a').decodedPinyin)
+        engine.clear()
+        engine.append('h')
+        assertEquals("he", engine.append('e').decodedPinyin)
+        engine.clear()
+        engine.append('h')
+        assertEquals("hu", engine.append('u').decodedPinyin)
+    }
+
+    @Test
+    fun allFinalMappingsProduceValidDecoding() {
+        val engine = NaturalShuangpinEngine(null)
+
+        engine.append('h')
+        assertEquals("hang", engine.append('h').decodedPinyin)
+        engine.clear()
+
+        engine.append('g')
+        assertEquals("geng", engine.append('g').decodedPinyin)
+        engine.clear()
+
+        engine.append('f')
+        assertEquals("fen", engine.append('f').decodedPinyin)
+        engine.clear()
+
+        engine.append('k')
+        assertEquals("kao", engine.append('k').decodedPinyin)
+        engine.clear()
+
+        engine.append('l')
+        assertEquals("lai", engine.append('l').decodedPinyin)
+        engine.clear()
+
+        engine.append('z')
+        assertEquals("zei", engine.append('z').decodedPinyin)
+        engine.clear()
+
+        engine.append('x')
+        assertEquals("xie", engine.append('x').decodedPinyin)
+        engine.clear()
+
+        engine.append('n')
+        assertEquals("nin", engine.append('n').decodedPinyin)
+        engine.clear()
+
+        engine.append('m')
+        assertEquals("mian", engine.append('m').decodedPinyin)
+        engine.clear()
+
+        engine.append('y')
+        assertEquals("ying", engine.append('y').decodedPinyin)
+    }
+
+    @Test
+    fun jqxWithVFinalDecodeToJuQuXu() {
+        val engine = NaturalShuangpinEngine(null)
+
+        engine.append('j')
+        assertEquals("ju", engine.append('v').decodedPinyin)
+        engine.clear()
+        engine.append('q')
+        assertEquals("qu", engine.append('v').decodedPinyin)
+        engine.clear()
+        engine.append('x')
+        assertEquals("xu", engine.append('v').decodedPinyin)
+        engine.clear()
+        engine.append('j')
+        assertEquals("jue", engine.append('t').decodedPinyin)
+        engine.clear()
+        engine.append('q')
+        assertEquals("que", engine.append('t').decodedPinyin)
+        engine.clear()
+        engine.append('x')
+        assertEquals("xue", engine.append('t').decodedPinyin)
+    }
+
+    @Test
+    fun pendingTailTriggersPartialLookup() {
+        val source = FakeLexiconDataSource().apply {
+            candidateMap["ni"] = listOf(candidate("你", "ni", 2, 1, 300))
+        }
+        val engine = NaturalShuangpinEngine(source)
+
+        engine.append('n')
+        engine.append('i')
+        val stateWithTwoChars = engine.currentState()
+        assertFalse(stateWithTwoChars.hasPendingTail)
+
+        engine.append('h')
+        val stateWithPending = engine.currentState()
+        assertTrue(stateWithPending.hasPendingTail)
+        assertEquals("nih", stateWithPending.rawCode)
+    }
+
+    @Test
+    fun backspaceRemovesLastCharacter() {
+        val engine = NaturalShuangpinEngine(null)
+
+        engine.append('w')
+        engine.append('o')
+        var state = engine.currentState()
+        assertEquals("wo", state.rawCode)
+
+        engine.backspace()
+        state = engine.currentState()
+        assertEquals("w", state.rawCode)
+
+        engine.backspace()
+        state = engine.currentState()
+        assertEquals("", state.rawCode)
+    }
+
+    @Test
+    fun clearResetsState() {
+        val engine = NaturalShuangpinEngine(null)
+
+        engine.append('w')
+        engine.append('o')
+        engine.append('m')
+        engine.append('f')
+        var state = engine.currentState()
+        assertEquals("womf", state.rawCode)
+
+        engine.clear()
+        state = engine.currentState()
+        assertEquals("", state.rawCode)
+        assertFalse(engine.hasPending())
+    }
+
+    @Test
+    fun emptyInputReturnsEmptyState() {
+        val engine = NaturalShuangpinEngine(null)
+        val state = engine.currentState()
+
+        assertEquals("", state.rawCode)
+        assertEquals("", state.decodedPinyin)
+        assertEquals("", state.previewText)
+        assertTrue(state.candidates.isEmpty())
+        assertFalse(state.hasPendingTail)
+        assertNull(state.primaryCandidate)
+    }
+
+    @Test
+    fun invalidPairReturnsRawCodeAsDecoded() {
+        val source = FakeLexiconDataSource()
+        val engine = NaturalShuangpinEngine(source)
+
+        engine.append('x')
+        val state = engine.append('z')
+        assertEquals("xz", state.decodedPinyin)
+        assertTrue(state.candidates.isEmpty())
+    }
+
+    @Test
+    fun multiSyllableDecodingWorksCorrectly() {
+        val source = FakeLexiconDataSource().apply {
+            candidateMap["wo'men"] = listOf(
+                candidate("我们", "wo'men", 4, 2, 600, ChineseCandidateKind.PHRASE),
+            )
+        }
+        val engine = NaturalShuangpinEngine(source)
+
+        val state = engine.append('w').let {
+            engine.append('o')
+        }.let {
+            engine.append('m')
+        }.let {
+            engine.append('f')
+        }
+
+        assertEquals("wo'men", state.decodedPinyin)
+        assertEquals("我们", state.primaryCandidate?.text)
+    }
+
+    @Test
+    fun fallbackCandidatesIncludeCommonPhrases() {
+        val source = FakeLexiconDataSource()
+        val engine = NaturalShuangpinEngine(source)
+
+        val state = engine.append('n').let { engine.append('i') }
+        assertTrue(state.candidates.any { it.text == "你" })
+        assertTrue(state.candidates.any { it.kind == ChineseCandidateKind.FALLBACK })
+    }
+
+    @Test
+    fun hasPendingReturnsTrueWhenCodeExists() {
+        val engine = NaturalShuangpinEngine(null)
+
+        assertFalse(engine.hasPending())
+
+        engine.append('w')
+        assertTrue(engine.hasPending())
+
+        engine.clear()
+        assertFalse(engine.hasPending())
+    }
+
+    @Test
+    fun consumeCandidateRemovesConsumedCodeLength() {
+        val source = FakeLexiconDataSource().apply {
+            candidateMap["wo'men"] = listOf(
+                candidate("我们", "wo'men", 4, 2, 600, ChineseCandidateKind.PHRASE),
+            )
+        }
+        val engine = NaturalShuangpinEngine(source)
+
+        engine.append('w')
+        engine.append('o')
+        engine.append('m')
+        engine.append('f')
+
+        val state = engine.currentState()
+        assertEquals("womf", state.rawCode)
+        assertTrue(state.candidates.isNotEmpty())
+
+        val woMenCandidate = state.candidates.first { it.text == "我们" }
+        engine.consumeCandidate(woMenCandidate)
+
+        val nextState = engine.currentState()
+        assertEquals("", nextState.rawCode)
+    }
+
+    @Test
+    fun caseInsensitiveInput() {
+        val source = FakeLexiconDataSource().apply {
+            candidateMap["wang"] = listOf(candidate("网", "wang", 2, 1, 300))
+        }
+        val engine = NaturalShuangpinEngine(source)
+
+        val upperState = engine.append('W').let { engine.append('H') }
+        assertEquals("wang", upperState.decodedPinyin)
+    }
+
+    @Test
+    fun groupedRawCodeShowsShuangpinBoundaries() {
+        val source = FakeLexiconDataSource()
+        val engine = NaturalShuangpinEngine(source)
+
+        val state = engine.append('n').let {
+            engine.append('i')
+        }.let {
+            engine.append('h')
+        }.let {
+            engine.append('k')
+        }
+
+        assertEquals("ni'hk", state.groupedRawCode)
+    }
+
+    @Test
+    fun canCommitOnSpaceRequiresCompleteCode() {
+        val source = FakeLexiconDataSource().apply {
+            candidateMap["ni"] = listOf(candidate("你", "ni", 2, 1, 300))
+        }
+        val engine = NaturalShuangpinEngine(source)
+
+        engine.append('n')
+        val completeState = engine.append('i')
+        assertTrue(completeState.canCommitOnSpace)
+        assertFalse(completeState.hasPendingTail)
+
+        engine.clear()
+        engine.append('n')
+        engine.append('i')
+        engine.append('h')
+        val pendingState = engine.currentState()
+        assertFalse(pendingState.canCommitOnSpace)
+        assertTrue(pendingState.hasPendingTail)
+    }
+
+    @Test
+    fun phraseCandidatesOverrideGeneratedCandidates() {
+        val source = FakeLexiconDataSource()
+        val engine = NaturalShuangpinEngine(source)
+
+        val state = engine.append('n').let {
+            engine.append('i')
+        }.let {
+            engine.append('h')
+        }.let {
+            engine.append('k')
+        }
+
+        assertTrue(state.candidates.any { it.text == "你好" })
+        assertTrue(state.candidates.any { it.kind == ChineseCandidateKind.PHRASE })
+    }
 
     private class FakeLexiconDataSource : ChineseLexiconDataSource {
         val candidateMap = linkedMapOf<String, List<ChineseCandidate>>()
