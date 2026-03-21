@@ -859,9 +859,14 @@ class ChineseLexiconStore(
                     if (trimmed.isEmpty() || trimmed.startsWith("#")) continue
                     val parts = trimmed.split(Regex("\\s+"), limit = 2)
                     if (parts.size < 2) continue
-                    val pinyinKey = parts[0].lowercase()
+                    val rawKey = parts[0].lowercase()
                     val text = parts[1].trim()
-                    if (pinyinKey.isBlank() || text.isBlank()) continue
+                    if (rawKey.isBlank() || text.isBlank()) continue
+                    val pinyinKey = if (rawKey.contains('\'')) {
+                        rawKey
+                    } else {
+                        rawKey.chunked(2).joinToString("'")
+                    }
                     val syllableCount = pinyinKey.count { it == '\'' } + 1
                     db.execSQL(
                         """
@@ -890,6 +895,24 @@ class ChineseLexiconStore(
 
     fun clearCustomDictionary() {
         val db = database ?: return
+        db.execSQL(
+            """
+            DELETE FROM user_freq
+            WHERE (pinyin_key, text) IN (
+                SELECT c.pinyin_key, c.text
+                FROM user_custom_lexicon c
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            DELETE FROM user_context_freq
+            WHERE (pinyin_key, text) IN (
+                SELECT c.pinyin_key, c.text
+                FROM user_custom_lexicon c
+            )
+            """.trimIndent(),
+        )
         db.execSQL("DELETE FROM user_custom_lexicon")
         invalidateAllCache()
     }

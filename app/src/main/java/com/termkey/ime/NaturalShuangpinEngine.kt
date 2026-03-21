@@ -903,7 +903,7 @@ class NaturalShuangpinEngine(
             "da'zi" to listOf("打字"),
             "kuai'le" to listOf("快乐"),
             "gao'xing" to listOf("高兴"),
-            "li'hao" to listOf("你好"),
+            "li'hao" to listOf("利好"),
             "yao'shi" to listOf("要是", "钥匙"),
             "dao'le" to listOf("到了"),
             "dao'di" to listOf("到底"),
